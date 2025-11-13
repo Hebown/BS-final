@@ -42,12 +42,12 @@ export async function createUser(
     });
     
     if(!validatedFields.success){
-        const treeified = z.treeifyError(validatedFields.error);
+        const treeifiedProperties = z.treeifyError(validatedFields.error).properties;
         return {
             errors: {
-                username: treeified.properties?.username?.errors,
-                email: treeified.properties?.email?.errors,
-                password: treeified.properties?.password?.errors,
+                username: treeifiedProperties?.username?.errors,
+                email: treeifiedProperties?.email?.errors,
+                password: treeifiedProperties?.password?.errors,
             },
             message: '表单验证失败，请检查输入是否符合规则'
         };
