@@ -1,7 +1,7 @@
 'use server'
 
 import { User } from '@/generated/prisma'
-import { prisma } from '../db'
+import { prisma } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import {z} from 'zod'
 
@@ -10,7 +10,8 @@ const createUserSchema= z.object({
         .min(3,'用户名至少需要3字符')
         .max(20,'用户名长度必须小于20字符')
         .regex(/^[a-zA-Z0-9_]+$/,'用户名只能包含字母、数字和下划线'),
-    email: z.email('请输入有效的邮箱地址')
+    email: z.email('请输入有效的邮箱地址'),
+    password: z.string().min(6,'密码至少需要6字符')
 })
 
 export type CreateUserState={
@@ -19,11 +20,13 @@ export type CreateUserState={
     errors?:{
         username?:string[]
         email?:string[] 
+        password?:string[]
     }
     data?:{
         id:string
         username:string
         email:string
+        password?:string
         createdAt:Date
     }
 }
@@ -34,16 +37,24 @@ export async function createUser(
 ):Promise<CreateUserState>{
     const validatedFields=createUserSchema.safeParse({
         username:formData.get('username'),
-        email:formData.get('email')
+        email:formData.get('email'),
+        password:formData.get('password'),
     });
-
+    
     if(!validatedFields.success){
+        const treeified = z.treeifyError(validatedFields.error);
         return {
-            errors: validatedFields.error.flatten().fieldErrors,
-            message:'表单验证失败，请检查输入是否符合规则'
-        }
+            errors: {
+                username: treeified.properties?.username?.errors,
+                email: treeified.properties?.email?.errors,
+                password: treeified.properties?.password?.errors,
+            },
+            message: '表单验证失败，请检查输入是否符合规则'
+        };
     }
-    const {username,email}=validatedFields.data
+
+    const {username,email,password}=validatedFields.data
+    
 
     try{
         const existingUser=await prisma.user.findFirst({
@@ -73,6 +84,7 @@ export async function createUser(
             data:{
                 username,
                 email,
+                password,
                 createdAt: new Date()
             }
         })
@@ -97,9 +109,11 @@ export async function createUser(
     }
 }
 
+type SafeUser=Omit<User,"password">
+
 export async function getUsers():Promise<{
     success:boolean
-    data?:User[]
+    data?:SafeUser[]
     error?:string
 }> 
 {
