@@ -4,7 +4,6 @@ import { useActionState } from 'react';
 import Link from 'next/link';
 import { login, LoginState } from '@/lib/actions/auth-actions';
 import { useSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
 
 const initialState:LoginState={
   success:false,
@@ -13,10 +12,14 @@ const initialState:LoginState={
 }
 
 export default function LoginForm() {
-  const [state,formAction,isPending]=useActionState(login,initialState)
   const {data:session,status}=useSession()
-  if(status==="authenticated"){
-    redirect('/')
+  const [state,formAction,isPending]=useActionState(login,initialState)
+  if(status==='authenticated'){
+    return(
+      <div>
+        <p>你已登录</p>
+      </div>
+    )
   }
   return (
     <div>
