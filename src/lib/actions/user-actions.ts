@@ -4,6 +4,7 @@ import { User } from '@/generated/prisma'
 import { prisma } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import {z} from 'zod'
+import bcrypt from 'bcryptjs'
 
 const createUserSchema= z.object({
     username:z.string()
@@ -55,6 +56,19 @@ export async function createUser(
 
     const {username,email,password}=validatedFields.data
     
+    // 确保密码是字符串类型
+    const passwordString = String(password)
+    
+    // 调试信息
+    console.log('注册调试信息:')
+    console.log('- 密码类型:', typeof passwordString)
+    console.log('- 密码长度:', passwordString.length)
+    
+    // 加密密码
+    const hashedPassword = await bcrypt.hash(passwordString, 10)
+    
+    console.log('- 哈希后长度:', hashedPassword.length)
+    console.log('- 哈希前10字符:', hashedPassword.substring(0, 10))
 
     try{
         const existingUser=await prisma.user.findFirst({
@@ -69,7 +83,7 @@ export async function createUser(
         if(existingUser){
             const errors:CreateUserState['errors']={}
             if(existingUser.email===email){
-                errors.username=['邮箱已使用']
+                errors.email=['邮箱已使用']
             }
             if(existingUser.username===username){
                 errors.username=['用户名已使用']
@@ -84,7 +98,7 @@ export async function createUser(
             data:{
                 username,
                 email,
-                password,
+                password: hashedPassword,
                 createdAt: new Date()
             }
         })

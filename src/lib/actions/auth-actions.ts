@@ -46,8 +46,22 @@ export async function login(
             password:password,
             redirect:false
         })
+        
+        // NextAuth v5: signIn 返回的对象包含 error 属性
+        if(result?.error){
+            return {
+                success:false,
+                message:result.error === 'CredentialsSignin' 
+                    ? '邮箱或密码错误，请检查后重试' 
+                    : `登录失败: ${result.error}`
+            }
+        }
     }catch(error){
-        return {success:false,message:`登录失败，错误为：${error}`}
+        console.error('登录异常:', error)
+        return {
+            success:false,
+            message:`登录失败: ${error instanceof Error ? error.message : '未知错误'}`
+        }
     }
     revalidatePath('/')
     redirect('/')

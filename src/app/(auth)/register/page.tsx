@@ -57,10 +57,13 @@ export default function RegisterForm() {
           <input 
             id="password"
             name="password"
-            type="text"
+            type="password"
             required
             placeholder="密码"
           />
+          {state.errors?.password && (
+            <p>{state.errors.password[0]}</p>
+          )}
         </div>
 
         <div>

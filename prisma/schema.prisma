@@ -5,14 +5,120 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  password  String   
+  password  String
   email     String   @unique
   username  String   @unique
+
+  // 关系
+  images Image[]
+  albums Album[]
+}
+
+model Image {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 基础信息
+  title     String?
+  publicId  String  @unique // Cloudinary public_id
+  secureUrl String // Cloudinary secure_url
+  width     Int
+  height    Int
+  format    String
+  bytes     Int // 文件大小
+
+  // EXIF 信息（可选）
+  exifData Json? // 存储完整的 EXIF 数据
+
+  // 自动提取的信息
+  takenAt  DateTime? // 拍摄时间
+  location String? // 地点
+  camera   String? // 相机型号
+  lens     String? // 镜头信息
+
+  // 关系
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tags        ImageTag[]
+  albumImages AlbumImage[]
+
+  // 编辑信息
+  editParams Json? // 存储编辑参数（裁剪、色调等）
+
+  @@index([userId])
+  @@index([takenAt])
+  @@index([createdAt])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  color       String? // 标签颜色（用于 UI 显示）
+  description String?
+
+  // 关系
+  images ImageTag[]
+
+  @@unique([name])
+  @@index([name])
+}
+
+model ImageTag {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  imageId String
+  image   Image  @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  tagId String
+  tag   Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([imageId, tagId])
+  @@index([imageId])
+  @@index([tagId])
+}
+
+model Album {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name         String
+  description  String?
+  coverImageId String?
+
+  // 关系
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  images AlbumImage[]
+
+  @@index([userId])
+}
+
+model AlbumImage {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  order     Int      @default(0) // 图片在相册中的顺序
+
+  albumId String
+  album   Album  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  imageId String
+  image   Image  @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([albumId, imageId])
+  @@index([albumId])
+  @@index([imageId])
 }

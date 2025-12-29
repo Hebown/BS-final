@@ -20,7 +20,7 @@ export default function LoginForm() {
         <p>你已登录</p>
       </div>
     )
-  }
+  }else 
   return (
     <div>
       <div>
