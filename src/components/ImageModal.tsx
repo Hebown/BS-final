@@ -40,20 +40,20 @@ export default function ImageModal({ image, onClose }: ImageModalProps) {
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl max-h-full overflow-auto"
+        className="glass-effect rounded-2xl max-w-4xl max-h-full overflow-auto shadow-2xl border border-gray-200/60 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <div className="p-4 border-b border-gray-200/60 flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-900">
             {image.title || image.publicId.split('/').pop()}
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl leading-none"
+            className="text-gray-500 hover:text-gray-700 text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors duration-200"
           >
             ✕
           </button>
@@ -72,12 +72,12 @@ export default function ImageModal({ image, onClose }: ImageModalProps) {
             {/* 标签 */}
             {image.tags.length > 0 && (
               <div>
-                <strong className="text-sm text-gray-700 dark:text-gray-300">标签:</strong>
+                <strong className="text-sm text-gray-700 font-medium">标签:</strong>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {image.tags.map((imageTag) => (
                     <span
                       key={imageTag.tag.id}
-                      className="text-xs px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200"
+                      className="text-xs px-2 py-1 rounded-full bg-[#007AFF]/10 text-[#007AFF] font-medium"
                     >
                       {imageTag.tag.name}
                     </span>
@@ -87,7 +87,7 @@ export default function ImageModal({ image, onClose }: ImageModalProps) {
             )}
 
             {/* 基本信息 */}
-            <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
+            <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
               <div>
                 <strong>尺寸:</strong> {image.width} × {image.height}
               </div>

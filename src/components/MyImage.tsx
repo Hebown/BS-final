@@ -11,6 +11,7 @@ interface MyImageProps {
     'crop' | 'gravity' | 'effects' | 'quality' | 
     'blur' | 'brightness' | 'contrast' | 'saturation'
   >
+  loading?: 'lazy' | 'eager'
 }
 
 export default function MyImage({ 
@@ -19,7 +20,8 @@ export default function MyImage({
   height = 200,
   alt = "图片",
   className = "",
-  transformations = {}
+  transformations = {},
+  loading = 'lazy'
 }: MyImageProps) {
   return (
     <CldImage
@@ -27,11 +29,12 @@ export default function MyImage({
       width={width}
       height={height}
       alt={alt}
-      className={`rounded-lg shadow-md transition-all duration-300 ${className}`}
-      crop={transformations.crop}
-      gravity={transformations.gravity}
+      className={className}
+      crop={transformations.crop || 'fill'}
+      gravity={transformations.gravity || 'auto'}
       effects={transformations.effects}
-      quality={transformations.quality}
+      quality={transformations.quality || 'auto'}
+      loading={loading}
     />
   )
 }
