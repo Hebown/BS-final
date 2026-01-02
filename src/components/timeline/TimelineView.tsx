@@ -5,6 +5,9 @@ import { cn } from '@/lib/utils'
 import MyImage from '@/components/MyImage'
 import { formatGroupTitle } from '@/lib/utils/timeline-date-format'
 import { getJustifiedLayoutFromAssets, type CommonPosition } from '@/lib/utils/layout-utils'
+import { Icon } from '@mdi/react'
+import { mdiMagnifyMinus, mdiMagnifyPlus, mdiHome } from '@mdi/js'
+import { Button } from '@/components/ui'
 
 type DatabaseImage = {
   id: string
@@ -62,11 +65,13 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
   const [containerWidth, setContainerWidth] = useState(1200)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(800)
-  const rowHeight = 235 // immich 默认行高
-  const spacing = 4 // 图片间距
-  const dayGroupSpacing = 32 // 日期组之间的间距
+  const [timeScale, setTimeScale] = useState(1) // 时间缩放因子，1为正常，<1为压缩，>1为放大
+  const [focusedDateRange, setFocusedDateRange] = useState<{ start: Date; end: Date } | null>(null)
+  
+  const rowHeight = 235
+  const spacing = 4
+  const baseDayGroupSpacing = 32
 
-  // 监听容器宽度变化
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -81,7 +86,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     return () => resizeObserver.disconnect()
   }, [])
 
-  // 监听滚动
   useEffect(() => {
     const scrollElement = scrollableRef.current
     if (!scrollElement) return
@@ -94,26 +98,29 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     return () => scrollElement.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // 按年月日分组图片，并使用 justified-layout 计算布局（immich风格）
-  const { monthGroups, totalHeight } = useMemo(() => {
+  const { monthGroups, totalHeight, timeRange } = useMemo(() => {
     const dayGroupMap = new Map<string, DatabaseImage[]>()
     const monthGroupMap = new Map<string, { year: number; month: number; dayGroups: DayGroup[] }>()
 
+    let minDate: Date | null = null
+    let maxDate: Date | null = null
+
     images.forEach((image) => {
       const date = image.takenAt || image.createdAt
+      if (!minDate || date < minDate) minDate = date
+      if (!maxDate || date > maxDate) maxDate = date
+
       const year = date.getFullYear()
       const month = date.getMonth() + 1
       const day = date.getDate()
       const dateKey = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
       const monthKey = `${year}-${month.toString().padStart(2, '0')}`
 
-      // 添加到日期组
       if (!dayGroupMap.has(dateKey)) {
         dayGroupMap.set(dateKey, [])
       }
       dayGroupMap.get(dateKey)!.push(image)
 
-      // 创建或获取月份组
       if (!monthGroupMap.has(monthKey)) {
         monthGroupMap.set(monthKey, {
           year,
@@ -123,9 +130,8 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
       }
     })
 
-    // 将日期组添加到月份组，并计算布局
     Array.from(dayGroupMap.entries())
-      .sort(([a], [b]) => b.localeCompare(a)) // 降序排列
+      .sort(([a], [b]) => b.localeCompare(a))
       .forEach(([dateKey, images]) => {
         const [year, month, day] = dateKey.split('-').map(Number)
         const date = new Date(year, month - 1, day)
@@ -133,24 +139,21 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
         const monthGroup = monthGroupMap.get(monthKey)
         
         if (monthGroup) {
-          // 使用 immich 风格的日期格式化
           const dateString = formatGroupTitle(date, 'zh-CN')
           
-          // 排序图片
           const sortedImages = images.sort((a, b) => {
             const dateA = a.takenAt || a.createdAt
             const dateB = b.takenAt || b.createdAt
             return dateB.getTime() - dateA.getTime()
           })
 
-          // 使用 justified-layout 计算布局
           const layout = getJustifiedLayoutFromAssets(
             sortedImages.map(img => ({ width: img.width, height: img.height })),
             {
               rowHeight,
-              rowWidth: containerWidth - 60, // 减去 Scrubber 宽度
+              rowWidth: containerWidth - 60,
               spacing,
-              heightTolerance: 0.25, // immich 默认容差
+              heightTolerance: 0.25,
             }
           )
 
@@ -167,7 +170,7 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
               containerHeight: layout.containerHeight,
               positions,
             },
-            top: 0, // 将在后面计算
+            top: 0,
             left: 0,
             width: layout.containerWidth,
             height: layout.containerHeight,
@@ -175,14 +178,26 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
         }
       })
 
-    // 排序月份组并计算位置
     const sortedMonths = Array.from(monthGroupMap.values())
       .sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year
         return b.month - a.month
       })
 
-    // 计算每个日期组和月份组的位置
+    const timeSpan = minDate && maxDate ? (maxDate as Date).getTime() - (minDate as Date).getTime() : 0
+    const daysSpan = timeSpan / (1000 * 60 * 60 * 24)
+    
+    let adaptiveSpacing = baseDayGroupSpacing
+    if (daysSpan > 365) {
+      adaptiveSpacing = Math.max(8, baseDayGroupSpacing * 0.3)
+    } else if (daysSpan > 180) {
+      adaptiveSpacing = Math.max(12, baseDayGroupSpacing * 0.5)
+    } else if (daysSpan > 90) {
+      adaptiveSpacing = Math.max(16, baseDayGroupSpacing * 0.7)
+    }
+
+    const finalSpacing = adaptiveSpacing * timeScale
+
     let currentTop = 0
     const processedMonths: MonthGroup[] = []
 
@@ -190,12 +205,11 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
       const monthTop = currentTop
       let monthHeight = 0
 
-      // 计算每个日期组的位置
       monthData.dayGroups.forEach((dayGroup) => {
         dayGroup.top = currentTop
         dayGroup.left = 0
-        currentTop += dayGroup.layout!.containerHeight + dayGroupSpacing
-        monthHeight += dayGroup.layout!.containerHeight + dayGroupSpacing
+        currentTop += dayGroup.layout!.containerHeight + finalSpacing
+        monthHeight += dayGroup.layout!.containerHeight + finalSpacing
       })
 
       processedMonths.push({
@@ -210,10 +224,10 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     return {
       monthGroups: processedMonths,
       totalHeight: currentTop,
+      timeRange: minDate && maxDate ? { min: minDate, max: maxDate, days: daysSpan } : null
     }
-  }, [images, containerWidth])
+  }, [images, containerWidth, timeScale])
 
-  // 计算 Scrubber 数据（标尺类型，类似 immich）
   const scrubberData = useMemo(() => {
     const segments = monthGroups.map((month) => ({
       year: month.year,
@@ -225,15 +239,14 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
       assetCount: month.dayGroups.reduce((sum, dg) => sum + dg.images.length, 0),
     }))
 
-    // 计算标签和点（类似 immich 的逻辑）
-    const MIN_YEAR_LABEL_DISTANCE = 16 // 最小年份标签距离
-    const MIN_DOT_DISTANCE = 8 // 最小点距离
+    const MIN_YEAR_LABEL_DISTANCE = 16
+    const MIN_DOT_DISTANCE = 8
     
     let verticalSpanWithoutLabel = 0
     let verticalSpanWithoutDot = 0
     let previousLabeledSegment: typeof segments[0] | undefined
 
-    return segments.map((segment, index) => {
+    return segments.map((segment) => {
       const hasLabel = (() => {
         if (!previousLabeledSegment) {
           previousLabeledSegment = segment
@@ -269,7 +282,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     })
   }, [monthGroups])
 
-  // 计算当前视口显示的月份
   const viewportTopMonth = useMemo(() => {
     const viewportTop = scrollTop
     const viewportBottom = scrollTop + viewportHeight
@@ -289,12 +301,27 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     return null
   }, [scrollTop, viewportHeight, monthGroups])
 
-  // Scrubber 点击处理
   const handleScrubberClick = (year: number, month: number, percent: number) => {
     const monthGroup = monthGroups.find(m => m.year === year && m.month === month)
     if (monthGroup && scrollableRef.current) {
       const scrollTo = monthGroup.top + (monthGroup.height * percent)
       scrollableRef.current.scrollTo({ top: scrollTo, behavior: 'smooth' })
+    }
+  }
+
+  const handleZoomIn = () => {
+    setTimeScale(prev => Math.min(2, prev + 0.2))
+  }
+
+  const handleZoomOut = () => {
+    setTimeScale(prev => Math.max(0.2, prev - 0.2))
+  }
+
+  const handleResetZoom = () => {
+    setTimeScale(1)
+    setFocusedDateRange(null)
+    if (scrollableRef.current) {
+      scrollableRef.current.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -310,11 +337,10 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
 
   return (
     <div ref={containerRef} className="relative w-full h-full flex">
-      {/* 主时间线内容 */}
       <div
         ref={scrollableRef}
         className="flex-1 overflow-y-auto scrollbar-hidden"
-        style={{ marginRight: '60px' }} // Scrubber 宽度
+        style={{ marginRight: '60px' }}
       >
         <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
           {monthGroups.map((monthGroup) => (
@@ -328,14 +354,12 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
                   width: `${dayGroup.width}px`,
                 }}
               >
-                {/* 日期标题 - immich风格，显示在每个日期组上方 */}
                 <div className="flex pt-7 pb-5 max-md:pt-5 max-md:pb-3 h-6 place-items-center text-xs font-medium text-immich-fg dark:text-immich-dark-fg md:text-sm">
                   <span className="w-full truncate first-letter:capitalize" title={dayGroup.date.toLocaleDateString('zh-CN')}>
                     {dayGroup.dateString}
                   </span>
                 </div>
 
-                {/* 图片网格 - immich风格，使用 justified-layout */}
                 {dayGroup.layout && (
                   <div 
                     className="relative overflow-clip"
@@ -372,7 +396,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
                             className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
                             loading="lazy"
                           />
-                          {/* 悬停时的叠加层 - immich风格 */}
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
                         </div>
                       )
@@ -385,7 +408,38 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
         </div>
       </div>
 
-      {/* Scrubber - 右侧时间线（标尺类型） */}
+      <div className="absolute top-4 left-4 z-10 flex gap-2">
+        <Button
+          variant="outline"
+          size="small"
+          onClick={handleZoomIn}
+          title="放大时间轴"
+        >
+          <Icon path={mdiMagnifyPlus} size={1} />
+        </Button>
+        <Button
+          variant="outline"
+          size="small"
+          onClick={handleZoomOut}
+          title="缩小时间轴"
+        >
+          <Icon path={mdiMagnifyMinus} size={1} />
+        </Button>
+        <Button
+          variant="outline"
+          size="small"
+          onClick={handleResetZoom}
+          title="重置视图"
+        >
+          <Icon path={mdiHome} size={1} />
+        </Button>
+        {timeRange && (
+          <div className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-black/50 rounded border border-gray-200 dark:border-gray-700">
+            跨度: {Math.round(timeRange.days)} 天 | 缩放: {Math.round(timeScale * 100)}%
+          </div>
+        )}
+      </div>
+
       <Scrubber
         data={scrubberData}
         totalHeight={totalHeight}
@@ -398,7 +452,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
   )
 }
 
-// Scrubber 组件 - 右侧时间线（标尺类型，类似 immich）
 interface ScrubberProps {
   data: Array<{
     year: number
@@ -424,19 +477,23 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
   const [hoverY, setHoverY] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
 
-  // 计算每个月份段在 Scrubber 中的位置（考虑内边距）
+  const PADDING_TOP = 32
+  const PADDING_BOTTOM = 10
+
   const segments = useMemo(() => {
     if (totalHeight === 0 || viewportHeight === 0) return []
     
-    const PADDING_TOP = 32
-    const PADDING_BOTTOM = 10
     const availableHeight = viewportHeight - PADDING_TOP - PADDING_BOTTOM
     
     if (availableHeight <= 0) return []
     
+    let currentTop = PADDING_TOP
+    
     return data.map((month) => {
-      const scrubberTop = PADDING_TOP + (month.top / totalHeight) * availableHeight
       const scrubberHeight = Math.max(1, (month.height / totalHeight) * availableHeight)
+      const scrubberTop = currentTop
+      
+      currentTop += scrubberHeight
       
       return {
         ...month,
@@ -446,17 +503,13 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
     })
   }, [data, totalHeight, viewportHeight])
 
-  // 计算当前滚动位置在 Scrubber 中的位置（考虑内边距）
   const scrollY = useMemo(() => {
-    if (totalHeight === 0 || viewportHeight === 0) return 0
-    const PADDING_TOP = 32
-    const PADDING_BOTTOM = 10
+    if (totalHeight === 0 || viewportHeight === 0) return PADDING_TOP
     const availableHeight = viewportHeight - PADDING_TOP - PADDING_BOTTOM
     if (availableHeight <= 0) return PADDING_TOP
     return PADDING_TOP + (scrollTop / totalHeight) * availableHeight
   }, [scrollTop, totalHeight, viewportHeight])
 
-  // 计算悬停标签
   const hoverLabel = useMemo(() => {
     if (!isHover && !isDragging) return null
     
@@ -478,7 +531,6 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
     setHoverY(y)
     
     if (isDragging) {
-      // 找到对应的月份并滚动
       for (const segment of segments) {
         if (y >= segment.scrubberTop && y <= segment.scrubberTop + segment.scrubberHeight) {
           const percent = (y - segment.scrubberTop) / segment.scrubberHeight
@@ -498,9 +550,6 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
     setIsDragging(false)
   }
 
-  const PADDING_TOP = 32 // 顶部内边距
-  const PADDING_BOTTOM = 10 // 底部内边距
-
   return (
     <div
       ref={scrubberRef}
@@ -517,7 +566,6 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
       aria-label="时间线导航"
       data-id="scrubber"
     >
-      {/* 悬停标签 - immich风格 */}
       {hoverLabel && (isHover || isDragging) && (
         <div
           className={cn(
@@ -531,24 +579,14 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
         </div>
       )}
 
-      {/* 滚动位置指示线 - immich风格，显示在右侧 */}
       {!isDragging && viewportTopMonth && (
         <div 
           className="absolute end-0 h-0.5 w-10 bg-immich-primary dark:bg-immich-dark-primary"
           style={{ top: `${scrollY - 2}px` }}
-        >
-          {/* 滚动时显示标签 */}
-          {scrollTop > 0 && (
-            <div className="absolute end-0 bottom-0 min-w-20 max-w-64 w-fit rounded-tl-md border-b-2 border-immich-primary dark:border-immich-dark-primary bg-immich-bg/90 dark:bg-immich-dark-bg/90 z-1 py-1 px-1 text-sm font-medium shadow-[0_0_8px_rgba(0,0,0,0.25)] dark:text-immich-dark-fg pointer-events-none">
-              {segments.find(s => s.year === viewportTopMonth?.year && s.month === viewportTopMonth?.month)?.dateFormatted || ''}
-            </div>
-          )}
-        </div>
+        />
       )}
 
-      {/* 标尺段 - immich风格，垂直标尺 */}
-      <div className="relative w-full h-full">
-        {/* Lead-in spacer */}
+      <div className="relative w-full" style={{ height: '100%' }}>
         <div
           className="relative"
           style={{ height: `${PADDING_TOP}px` }}
@@ -556,7 +594,6 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
           data-label={segments[0]?.dateFormatted}
         />
 
-        {/* Time Segments - 标尺类型，垂直排列，每个段是一个独立的 div */}
         {segments.map((segment) => (
           <div
             key={`${segment.year}-${segment.month}`}
@@ -568,21 +605,18 @@ function Scrubber({ data, totalHeight, viewportHeight, scrollTop, viewportTopMon
               height: `${Math.max(1, segment.scrubberHeight)}px`,
             }}
           >
-            {/* 年份标签 - immich风格，显示在底部右侧 */}
             {segment.hasLabel && (
               <div className="absolute end-5 text-[12px] dark:text-immich-dark-fg font-mono bottom-0 pointer-events-none whitespace-nowrap">
                 {segment.year}
               </div>
             )}
 
-            {/* 点标记 - immich风格，显示在底部右侧 */}
             {segment.hasDot && (
               <div className="absolute end-3 bottom-0 h-1 w-1 rounded-full bg-gray-300 dark:bg-gray-500 pointer-events-none" />
             )}
           </div>
         ))}
 
-        {/* Lead-out spacer */}
         <div
           className="relative"
           style={{ height: `${PADDING_BOTTOM}px` }}
