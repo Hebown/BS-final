@@ -12,9 +12,13 @@ import {
   mdiHeartOutline,
   mdiHeart,
   mdiShareVariant,
+  mdiPencil,
 } from '@mdi/js'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button, Input, Field } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { updateImage } from '@/lib/actions/image-actions'
+import { useRouter } from 'next/navigation'
 
 type DatabaseImage = {
   id: string
@@ -56,7 +60,16 @@ export default function ImageModal({
 }: ImageModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState(image.title || '')
+  const [editTakenAt, setEditTakenAt] = useState(
+    image.takenAt ? new Date(image.takenAt).toISOString().slice(0, 16) : ''
+  )
+  const router = useRouter()
   const currentIndex = images.findIndex(img => img.id === image.id)
+  
+  const [updateState, setUpdateState] = useState<{ success: boolean; message?: string; error?: string }>({ success: false })
+  const [isUpdating, setIsUpdating] = useState(false)
 
   // 键盘导航
   useEffect(() => {
@@ -88,6 +101,44 @@ export default function ImageModal({
       link.click()
     }
   }
+
+  const handleSaveEdit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsUpdating(true)
+    setUpdateState({ success: false })
+    
+    try {
+      const formData = new FormData(e.currentTarget)
+      const takenAt = formData.get('takenAt') as string
+      const result = await updateImage(image.id, {
+        title: formData.get('title') as string || null,
+        takenAt: takenAt ? new Date(takenAt) : null,
+      })
+      
+      setUpdateState(result)
+      
+      if (result.success) {
+        setIsEditing(false)
+        // 延迟刷新，让用户看到成功消息
+        setTimeout(() => {
+          router.refresh() // 刷新页面以更新时间轴
+        }, 500)
+      }
+    } catch (error) {
+      setUpdateState({
+        success: false,
+        error: error instanceof Error ? error.message : '保存失败'
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // 当图片变化时更新编辑表单
+  useEffect(() => {
+    setEditTitle(image.title || '')
+    setEditTakenAt(image.takenAt ? new Date(image.takenAt).toISOString().slice(0, 16) : '')
+  }, [image])
 
   return (
     <div 
@@ -192,6 +243,22 @@ export default function ImageModal({
             showDetails && "bg-immich-primary/50"
           )}
         />
+        <IconButton
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          size="medium"
+          onClick={(e) => {
+            e.stopPropagation()
+            setIsEditing(!isEditing)
+          }}
+          aria-label="编辑"
+          icon={<Icon path={mdiPencil} size={1.2} />}
+          className={cn(
+            "bg-black/50 hover:bg-black/70 text-white",
+            isEditing && "bg-immich-primary/50"
+          )}
+        />
       </div>
 
       {/* 图片显示区域 - immich风格，全屏居中 */}
@@ -221,7 +288,7 @@ export default function ImageModal({
       </div>
 
       {/* 详情面板 - immich风格，右侧滑出 */}
-      {showDetails && (
+      {(showDetails || isEditing) && (
         <div 
           className={cn(
             "absolute right-0 top-0 h-full w-80 bg-immich-dark-gray dark:bg-immich-dark-bg",
@@ -232,9 +299,78 @@ export default function ImageModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-6 space-y-6">
-            <h3 className="text-lg font-semibold text-immich-dark-fg mb-4">
-              详细信息
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-immich-dark-fg">
+                {isEditing ? '编辑信息' : '详细信息'}
+              </h3>
+              <IconButton
+                variant="ghost"
+                shape="round"
+                color="secondary"
+                size="small"
+                onClick={() => {
+                  setIsEditing(false)
+                  setShowDetails(false)
+                }}
+                icon={<Icon path={mdiClose} size={1} />}
+              />
+            </div>
+
+            {/* 编辑表单 */}
+            {isEditing && (
+              <form 
+                onSubmit={handleSaveEdit}
+                className="space-y-4"
+              >
+                <Field label="标题">
+                  <Input
+                    name="title"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="图片标题"
+                  />
+                </Field>
+                
+                <Field label="拍摄时间（用于时间轴分组）">
+                  <Input
+                    name="takenAt"
+                    type="datetime-local"
+                    value={editTakenAt}
+                    onChange={(e) => setEditTakenAt(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    修改拍摄时间后，图片会在时间轴中重新分组
+                  </p>
+                </Field>
+
+                {updateState.error && (
+                  <div className="text-sm text-danger-500">{updateState.error}</div>
+                )}
+
+                {updateState.success && (
+                  <div className="text-sm text-success-500">{updateState.message}</div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    type="submit"
+                    size="medium"
+                    loading={isUpdating}
+                    className="flex-1"
+                  >
+                    保存
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="medium"
+                    onClick={() => setIsEditing(false)}
+                  >
+                    取消
+                  </Button>
+                </div>
+              </form>
+            )}
 
             {/* 标签 */}
             {image.tags.length > 0 && (
