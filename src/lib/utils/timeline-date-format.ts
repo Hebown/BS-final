@@ -4,7 +4,7 @@ import { DateTime } from 'luxon'
  * 格式化月份组标题
  */
 export function formatMonthGroupTitle(date: Date, locale: string = 'zh-CN'): string {
-  const dt = DateTime.fromJSDate(date, { locale })
+  const dt = DateTime.fromJSDate(date).setLocale(locale)
   
   if (!dt.isValid) {
     return date.toLocaleDateString(locale, { month: 'long', year: 'numeric' })
@@ -20,13 +20,13 @@ export function formatMonthGroupTitle(date: Date, locale: string = 'zh-CN'): str
  * 格式化日期组标题
  */
 export function formatGroupTitle(date: Date, locale: string = 'zh-CN'): string {
-  const dt = DateTime.fromJSDate(date, { locale })
+  const dt = DateTime.fromJSDate(date).setLocale(locale)
   
   if (!dt.isValid) {
     return date.toLocaleDateString(locale)
   }
 
-  const today = DateTime.now().startOf('day')
+  const today = DateTime.now().setLocale(locale).startOf('day')
   const dateStart = dt.startOf('day')
 
   // 今天
