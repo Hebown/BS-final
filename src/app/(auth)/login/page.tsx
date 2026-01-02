@@ -35,7 +35,7 @@ export default function LoginForm() {
       <AuthPageLayout title="登录">
         <div className="text-center">
           <p className="text-immich-fg dark:text-immich-dark-fg">加载中...</p>
-        </div>
+      </div>
       </AuthPageLayout>
     )
   }
@@ -55,12 +55,12 @@ export default function LoginForm() {
           required
         >
           <Input
-            id="email"
-            name="email"
-            type="email"
+              id="email"
+              name="email"
+              type="email"
             autoComplete="email"
-            required
-            placeholder="邮箱地址"
+              required
+              placeholder="邮箱地址"
             invalid={!!state.errors?.email}
           />
         </Field>
@@ -71,17 +71,17 @@ export default function LoginForm() {
           required
         >
           <PasswordInput
-            id="password"
-            name="password"
+              id="password"
+              name="password"
             autoComplete="current-password"
-            required
-            placeholder="密码"
+              required
+              placeholder="密码"
             invalid={!!state.errors?.password}
-          />
+            />
         </Field>
 
         <Button
-          type="submit"
+              type="submit"
           size="large"
           shape="round"
           fullWidth
@@ -90,7 +90,7 @@ export default function LoginForm() {
         >
           登录
         </Button>
-      </form>
+        </form>
 
       <div className="text-center text-sm text-gray-600 dark:text-gray-400">
         或{' '}
@@ -100,7 +100,7 @@ export default function LoginForm() {
         >
           注册新账号
         </Link>
-      </div>
+    </div>
       </Stack>
     </AuthPageLayout>
   )
