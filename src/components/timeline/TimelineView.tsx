@@ -5,9 +5,6 @@ import { cn } from '@/lib/utils'
 import MyImage from '@/components/MyImage'
 import { formatGroupTitle } from '@/lib/utils/timeline-date-format'
 import { getJustifiedLayoutFromAssets, type CommonPosition } from '@/lib/utils/layout-utils'
-import { Icon } from '@mdi/react'
-import { mdiMagnifyMinus, mdiMagnifyPlus, mdiHome } from '@mdi/js'
-import { Button } from '@/components/ui'
 
 type DatabaseImage = {
   id: string
@@ -65,12 +62,9 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
   const [containerWidth, setContainerWidth] = useState(1200)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(800)
-  const [timeScale, setTimeScale] = useState(1) // 时间缩放因子，1为正常，<1为压缩，>1为放大
-  const [focusedDateRange, setFocusedDateRange] = useState<{ start: Date; end: Date } | null>(null)
-  
   const rowHeight = 235
   const spacing = 4
-  const baseDayGroupSpacing = 32
+  const dayGroupSpacing = 32
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -98,18 +92,12 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     return () => scrollElement.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const { monthGroups, totalHeight, timeRange } = useMemo(() => {
+  const { monthGroups, totalHeight } = useMemo(() => {
     const dayGroupMap = new Map<string, DatabaseImage[]>()
     const monthGroupMap = new Map<string, { year: number; month: number; dayGroups: DayGroup[] }>()
 
-    let minDate: Date | null = null
-    let maxDate: Date | null = null
-
     images.forEach((image) => {
       const date = image.takenAt || image.createdAt
-      if (!minDate || date < minDate) minDate = date
-      if (!maxDate || date > maxDate) maxDate = date
-
       const year = date.getFullYear()
       const month = date.getMonth() + 1
       const day = date.getDate()
@@ -184,20 +172,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
         return b.month - a.month
       })
 
-    const timeSpan = minDate && maxDate ? (maxDate as Date).getTime() - (minDate as Date).getTime() : 0
-    const daysSpan = timeSpan / (1000 * 60 * 60 * 24)
-    
-    let adaptiveSpacing = baseDayGroupSpacing
-    if (daysSpan > 365) {
-      adaptiveSpacing = Math.max(8, baseDayGroupSpacing * 0.3)
-    } else if (daysSpan > 180) {
-      adaptiveSpacing = Math.max(12, baseDayGroupSpacing * 0.5)
-    } else if (daysSpan > 90) {
-      adaptiveSpacing = Math.max(16, baseDayGroupSpacing * 0.7)
-    }
-
-    const finalSpacing = adaptiveSpacing * timeScale
-
     let currentTop = 0
     const processedMonths: MonthGroup[] = []
 
@@ -208,8 +182,8 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
       monthData.dayGroups.forEach((dayGroup) => {
         dayGroup.top = currentTop
         dayGroup.left = 0
-        currentTop += dayGroup.layout!.containerHeight + finalSpacing
-        monthHeight += dayGroup.layout!.containerHeight + finalSpacing
+        currentTop += dayGroup.layout!.containerHeight + dayGroupSpacing
+        monthHeight += dayGroup.layout!.containerHeight + dayGroupSpacing
       })
 
       processedMonths.push({
@@ -224,9 +198,8 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     return {
       monthGroups: processedMonths,
       totalHeight: currentTop,
-      timeRange: minDate && maxDate ? { min: minDate, max: maxDate, days: daysSpan } : null
     }
-  }, [images, containerWidth, timeScale])
+  }, [images, containerWidth])
 
   const scrubberData = useMemo(() => {
     const segments = monthGroups.map((month) => ({
@@ -306,22 +279,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
     if (monthGroup && scrollableRef.current) {
       const scrollTo = monthGroup.top + (monthGroup.height * percent)
       scrollableRef.current.scrollTo({ top: scrollTo, behavior: 'smooth' })
-    }
-  }
-
-  const handleZoomIn = () => {
-    setTimeScale(prev => Math.min(2, prev + 0.2))
-  }
-
-  const handleZoomOut = () => {
-    setTimeScale(prev => Math.max(0.2, prev - 0.2))
-  }
-
-  const handleResetZoom = () => {
-    setTimeScale(1)
-    setFocusedDateRange(null)
-    if (scrollableRef.current) {
-      scrollableRef.current.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -406,38 +363,6 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
             ))
           ))}
         </div>
-      </div>
-
-      <div className="absolute top-4 left-4 z-10 flex gap-2">
-        <Button
-          variant="outline"
-          size="small"
-          onClick={handleZoomIn}
-          title="放大时间轴"
-        >
-          <Icon path={mdiMagnifyPlus} size={1} />
-        </Button>
-        <Button
-          variant="outline"
-          size="small"
-          onClick={handleZoomOut}
-          title="缩小时间轴"
-        >
-          <Icon path={mdiMagnifyMinus} size={1} />
-        </Button>
-        <Button
-          variant="outline"
-          size="small"
-          onClick={handleResetZoom}
-          title="重置视图"
-        >
-          <Icon path={mdiHome} size={1} />
-        </Button>
-        {timeRange && (
-          <div className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 bg-white/50 dark:bg-black/50 rounded border border-gray-200 dark:border-gray-700">
-            跨度: {Math.round(timeRange.days)} 天 | 缩放: {Math.round(timeScale * 100)}%
-          </div>
-        )}
       </div>
 
       <Scrubber
