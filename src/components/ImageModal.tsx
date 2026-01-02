@@ -13,12 +13,15 @@ import {
   mdiHeart,
   mdiShareVariant,
   mdiPencil,
+  mdiImageEditOutline,
 } from '@mdi/js'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button, Input, Field } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { updateImage } from '@/lib/actions/image-actions'
+import { updateImage, saveEditedImageAsNew, EditParams } from '@/lib/actions/image-actions'
 import { useRouter } from 'next/navigation'
+import ImageEditor from './ImageEditor'
+import { CldImage } from 'next-cloudinary'
 
 type DatabaseImage = {
   id: string
@@ -60,7 +63,8 @@ export default function ImageModal({
 }: ImageModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditing, setIsEditing] = useState(false) // 编辑元数据
+  const [isImageEditing, setIsImageEditing] = useState(false) // 编辑图片
   const [editTitle, setEditTitle] = useState(image.title || '')
   const [editTakenAt, setEditTakenAt] = useState(
     image.takenAt ? new Date(image.takenAt).toISOString().slice(0, 16) : ''
@@ -145,7 +149,7 @@ export default function ImageModal({
       className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex items-center justify-center"
       onClick={onClose}
     >
-      {/* 关闭按钮 - immich风格 */}
+      {/* 关闭按钮 */}
       <div className="absolute top-4 right-4 z-10">
         <IconButton
           variant="ghost"
@@ -199,7 +203,7 @@ export default function ImageModal({
         </>
       )}
 
-      {/* 工具栏 - immich风格 */}
+      {/* 工具栏 */}
       <div className="absolute top-4 left-4 z-10 flex gap-2">
         <IconButton
           variant="ghost"
@@ -251,30 +255,70 @@ export default function ImageModal({
           onClick={(e) => {
             e.stopPropagation()
             setIsEditing(!isEditing)
+            setIsImageEditing(false) // 关闭图片编辑
           }}
-          aria-label="编辑"
+          aria-label="编辑信息"
           icon={<Icon path={mdiPencil} size={1.2} />}
           className={cn(
             "bg-black/50 hover:bg-black/70 text-white",
             isEditing && "bg-immich-primary/50"
           )}
         />
+        <IconButton
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          size="medium"
+          onClick={(e) => {
+            e.stopPropagation()
+            setIsImageEditing(!isImageEditing)
+            setIsEditing(false) // 关闭元数据编辑
+          }}
+          aria-label="编辑图片"
+          icon={<Icon path={mdiImageEditOutline} size={1.2} />}
+          className={cn(
+            "bg-black/50 hover:bg-black/70 text-white",
+            isImageEditing && "bg-immich-primary/50"
+          )}
+        />
       </div>
 
-      {/* 图片显示区域 - immich风格，全屏居中 */}
+      {/* 图片显示区域 */}
       <div 
         className="relative w-full h-full flex items-center justify-center p-4"
         onClick={(e) => e.stopPropagation()}
       >
         {image.secureUrl ? (
-          <img
-            src={image.secureUrl}
-            alt={image.title || `大图 ${image.publicId}`}
-            className="max-w-full max-h-full object-contain"
-            style={{
-              maxHeight: 'calc(100vh - 8rem)'
-            }}
-          />
+          isImageEditing ? (
+            // 编辑模式：显示编辑器
+            <div className="w-full h-full max-w-7xl max-h-[calc(100vh-8rem)]">
+              <ImageEditor
+                publicId={image.publicId}
+                secureUrl={image.secureUrl}
+                onSave={async (editParams, imageData, overwrite) => {
+                  const result = await saveEditedImageAsNew(image.id, editParams, imageData, overwrite)
+                  if (result.success) {
+                    // 保存成功后刷新页面
+                    router.refresh()
+                  }
+                  return result
+                }}
+                onCancel={() => {
+                  setIsImageEditing(false)
+                }}
+              />
+            </div>
+          ) : (
+            // 正常模式：显示图片
+            <img
+              src={image.secureUrl}
+              alt={image.title || `大图 ${image.publicId}`}
+              className="max-w-full max-h-full object-contain"
+              style={{
+                maxHeight: 'calc(100vh - 8rem)'
+              }}
+            />
+          )
         ) : (
           <div className="text-white">图片加载失败</div>
         )}
@@ -287,8 +331,8 @@ export default function ImageModal({
         )}
       </div>
 
-      {/* 详情面板 - immich风格，右侧滑出 */}
-      {(showDetails || isEditing) && (
+      {/* 详情面板 */}
+      {(showDetails || isEditing) && !isImageEditing && (
         <div 
           className={cn(
             "absolute right-0 top-0 h-full w-80 bg-immich-dark-gray dark:bg-immich-dark-bg",
