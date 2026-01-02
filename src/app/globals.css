@@ -1,26 +1,244 @@
 @import "tailwindcss";
+@import "../styles/theme.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:where(.dark, .dark *):not(.light));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-immich-mono: Overpass Mono, monospace;
+  --spacing-18: 4.5rem;
+  --breakpoint-tall: 800px;
+  --breakpoint-2xl: 1535px;
+  --breakpoint-xl: 1279px;
+  --breakpoint-lg: 1023px;
+  --breakpoint-md: 767px;
+  --breakpoint-sm: 639px;
+  --breakpoint-sidebar: 850px;
+  
+  /* Immich color mappings for Tailwind */
+  --color-immich-primary: rgb(var(--immich-primary));
+  --color-immich-bg: rgb(var(--immich-bg));
+  --color-immich-fg: rgb(var(--immich-fg));
+  --color-immich-gray: rgb(var(--immich-gray));
+  --color-immich-dark-primary: rgb(var(--immich-dark-primary));
+  --color-immich-dark-bg: rgb(var(--immich-dark-bg));
+  --color-immich-dark-fg: rgb(var(--immich-dark-fg));
+  --color-immich-dark-gray: rgb(var(--immich-dark-gray));
 }
 
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Immich color system - Light mode */
+    --immich-primary: 66 80 175;
+    --immich-bg: 255 255 255;
+    --immich-fg: 0 0 0;
+    --immich-gray: 245 245 245;
+    
+    /* Immich color system - Dark mode */
+    --immich-dark-primary: 172 203 250;
+    --immich-dark-bg: 10 10 10;
+    --immich-dark-fg: 229 231 235;
+    --immich-dark-gray: 33 33 33;
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  @font-face {
+    font-family: 'Overpass';
+    src: url('/fonts/overpass/Overpass.ttf') format('truetype-variations');
+    font-weight: 1 999;
+    font-style: normal;
+    ascent-override: 106.25%;
+    size-adjust: 106.25%;
+  }
+
+  @font-face {
+    font-family: 'Overpass Mono';
+    src: url('/fonts/overpass/OverpassMono.ttf') format('truetype-variations');
+    font-weight: 1 999;
+    font-style: monospace;
+    ascent-override: 106.25%;
+    size-adjust: 106.25%;
+  }
+
+  :root {
+    font-family: 'Overpass', sans-serif;
+    --navbar-height: calc(4.5rem + 4px);
+    --navbar-height-md: calc(4.5rem + 4px - 14px);
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  :root:not(.dark) {
+    color-scheme: light;
+  }
+
+  html {
+    height: 100%;
+    width: 100%;
+  }
+
+  html::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 16px;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background: rgba(85, 86, 87, 0.408);
+    border-radius: 16px;
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: #4250afad;
+    border-radius: 16px;
+  }
+
+  body {
+    margin: 0;
+    color: #3a3a3a;
+  }
+
+  input:focus-visible {
+    outline-offset: 0px !important;
+    outline: none !important;
+  }
+
+  .text-white-shadow {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  }
+
+  .icon-white-drop-shadow {
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+  }
 }
+
+/* Utility classes */
+@utility immich-form-input {
+  @apply rounded-xl bg-slate-200 px-3 py-3 text-sm focus:border-primary disabled:cursor-not-allowed disabled:bg-gray-400 disabled:text-gray-100 dark:bg-gray-600 dark:text-gray-200 dark:disabled:bg-gray-800 dark:disabled:text-gray-400;
+}
+
+@utility immich-form-label {
+  @apply font-medium text-gray-500 dark:text-gray-300;
+}
+
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+@utility scrollbar-stable {
+  scrollbar-gutter: stable both-edges;
+}
+
+@utility immich-scrollbar {
+  scrollbar-width: thin;
+}
+
+/* Immich color utility classes */
+@layer utilities {
+  .bg-immich-primary {
+    background-color: rgb(var(--immich-primary));
+  }
+  
+  .text-immich-primary {
+    color: rgb(var(--immich-primary));
+  }
+  
+  .border-immich-primary {
+    border-color: rgb(var(--immich-primary));
+  }
+  
+  .bg-immich-dark-primary {
+    background-color: rgb(var(--immich-dark-primary));
+  }
+  
+  .text-immich-dark-primary {
+    color: rgb(var(--immich-dark-primary));
+  }
+  
+  .bg-immich-bg {
+    background-color: rgb(var(--immich-bg));
+  }
+  
+  .bg-immich-dark-bg {
+    background-color: rgb(var(--immich-dark-bg));
+  }
+  
+  .text-immich-fg {
+    color: rgb(var(--immich-fg));
+  }
+  
+  .text-immich-dark-fg {
+    color: rgb(var(--immich-dark-fg));
+  }
+  
+  .bg-immich-dark-gray {
+    background-color: rgb(var(--immich-dark-gray));
+  }
+  
+  .border-immich-dark-gray {
+    border-color: rgb(var(--immich-dark-gray));
+  }
+  
+  .bg-subtle {
+    background-color: rgb(var(--immich-gray));
+  }
+  
+      .dark .bg-subtle {
+        background-color: rgb(var(--immich-dark-gray));
+      }
+      
+      /* Immich scrollbar styles */
+      .immich-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgb(var(--immich-gray)) transparent;
+      }
+      
+      .immich-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      
+      .immich-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      
+      .immich-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgb(var(--immich-gray));
+        border-radius: 4px;
+      }
+      
+      .immich-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: rgb(var(--immich-primary));
+      }
+      
+      .dark .immich-scrollbar {
+        scrollbar-color: rgb(var(--immich-dark-gray)) transparent;
+      }
+      
+      .dark .immich-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgb(var(--immich-dark-gray));
+      }
+      
+      .dark .immich-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: rgb(var(--immich-dark-primary));
+      }
+      
+      .scrollbar-hidden {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      
+      .scrollbar-hidden::-webkit-scrollbar {
+        display: none;
+      }
+    }
