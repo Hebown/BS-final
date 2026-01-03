@@ -57,7 +57,6 @@ export default function SelectedImagesView({
     setIsExiting(true)
     setTimeout(() => {
       onClose()
-      onBack?.()
     }, 300)
   }
 
