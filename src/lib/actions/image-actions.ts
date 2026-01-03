@@ -629,6 +629,99 @@ export async function deleteImage(imageId: string): Promise<{
   }
 }
 
+// 批量删除图片
+export async function deleteImages(imageIds: string[]): Promise<{
+  success: boolean
+  message?: string
+  error?: string
+  deletedCount?: number
+  failedCount?: number
+}> {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: '请先登录'
+      }
+    }
+
+    if (!imageIds || imageIds.length === 0) {
+      return {
+        success: false,
+        error: '请选择要删除的图片'
+      }
+    }
+
+    let deletedCount = 0
+    let failedCount = 0
+    const errors: string[] = []
+
+    // 批量查询图片信息
+    const images = await prisma.image.findMany({
+      where: {
+        id: { in: imageIds },
+        userId: session.user.id
+      },
+      select: { id: true, publicId: true, userId: true }
+    })
+
+    // 验证所有权
+    if (images.length !== imageIds.length) {
+      return {
+        success: false,
+        error: '部分图片不存在或无权删除'
+      }
+    }
+
+    // 批量删除 Cloudinary 图片
+    const deletePromises = images.map(async (image) => {
+      try {
+        // 删除 Cloudinary 图片
+        await cloudinary.uploader.destroy(image.publicId)
+        // 删除数据库记录
+        await prisma.image.delete({
+          where: { id: image.id }
+        })
+        deletedCount++
+        return { success: true, imageId: image.id }
+      } catch (error) {
+        failedCount++
+        const errorMsg = error instanceof Error ? error.message : '删除失败'
+        errors.push(`${image.id}: ${errorMsg}`)
+        return { success: false, imageId: image.id, error: errorMsg }
+      }
+    })
+
+    await Promise.all(deletePromises)
+
+    revalidatePath('/dashboard')
+    revalidatePath('/')
+
+    if (deletedCount === 0) {
+      return {
+        success: false,
+        error: '所有图片删除失败',
+        deletedCount: 0,
+        failedCount
+      }
+    }
+
+    return {
+      success: true,
+      message: `成功删除 ${deletedCount} 张图片${failedCount > 0 ? `，${failedCount} 张删除失败` : ''}`,
+      deletedCount,
+      failedCount
+    }
+  } catch (error) {
+    console.error('批量删除图片失败:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '批量删除图片失败'
+    }
+  }
+}
+
 // 搜索图片
 export interface SearchParams {
   keyword?: string // 关键词（标题）

@@ -119,17 +119,37 @@ export default function TimelineClient({ images: initialImages }: TimelineClient
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isSelectionMode])
 
+  // 当显示选中视图时，直接使用 ImageModal 轮播展示
   if (showSelectedView) {
     const selectedImages = processedImages.filter(img => selectedImageIds.has(img.id))
+    
+    // 如果没有选中的图片，关闭视图
+    if (selectedImages.length === 0) {
+      setShowSelectedView(false)
+      return null
+    }
+    
+    // 如果还没有设置选中的图片，默认选择第一张
+    const currentImage = selectedImage && selectedImages.find(img => img.id === selectedImage.id)
+      ? selectedImage
+      : selectedImages[0]
+    
+    const currentIndex = selectedImages.findIndex(img => img.id === currentImage.id)
+    
     return (
-      <SelectedImagesView
+      <ImageModal
+        image={currentImage}
         images={selectedImages}
-        isOpen={showSelectedView}
-        onClose={handleBackFromSelected}
-        onImageClick={(image) => {
-          setSelectedImage(image)
+        onClose={() => {
           setShowSelectedView(false)
+          setSelectedImage(null)
         }}
+        onNext={currentIndex < selectedImages.length - 1 
+          ? () => setSelectedImage(selectedImages[currentIndex + 1])
+          : undefined}
+        onPrevious={currentIndex > 0
+          ? () => setSelectedImage(selectedImages[currentIndex - 1])
+          : undefined}
       />
     )
   }

@@ -54,6 +54,9 @@ interface ImageModalProps {
   onClose: () => void
   onNext?: () => void
   onPrevious?: () => void
+  onImageDeleted?: (imageId: string) => void // 图片删除后的回调
+  showBatchDelete?: boolean // 是否显示批量删除按钮
+  onBatchDelete?: () => void // 批量删除回调
 }
 
 export default function ImageModal({ 
@@ -61,7 +64,10 @@ export default function ImageModal({
   images = [],
   onClose,
   onNext,
-  onPrevious 
+  onPrevious,
+  onImageDeleted,
+  showBatchDelete = false,
+  onBatchDelete
 }: ImageModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
@@ -151,6 +157,9 @@ export default function ImageModal({
     try {
       const result = await deleteImage(image.id)
       if (result.success) {
+        // 通知父组件图片已删除
+        onImageDeleted?.(image.id)
+        
         // 删除成功后，如果有下一张则导航到下一张，否则导航到上一张
         if (currentIndex < images.length - 1 && onNext) {
           onNext()
@@ -397,6 +406,24 @@ export default function ImageModal({
             isImageEditing && "bg-immich-primary/50"
           )}
         />
+        {showBatchDelete && onBatchDelete && (
+          <IconButton
+            variant="ghost"
+            shape="round"
+            color="secondary"
+            size="medium"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm(`确定要删除所有选中的 ${images.length} 张图片吗？此操作无法撤销。`)) {
+                onBatchDelete()
+              }
+            }}
+            aria-label="批量删除"
+            icon={<Icon path={mdiDelete} size={1.2} />}
+            className="bg-black/50 hover:bg-red-500/50 text-white"
+            title={`批量删除 ${images.length} 张图片`}
+          />
+        )}
         <IconButton
           variant="ghost"
           shape="round"
