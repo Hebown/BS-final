@@ -14,14 +14,16 @@ import {
   mdiShareVariant,
   mdiPencil,
   mdiImageEditOutline,
+  mdiDelete,
 } from '@mdi/js'
 import { IconButton } from '@/components/ui/icon-button'
-import { Button, Input, Field } from '@/components/ui'
+import { Button, Input, Field, Modal, ModalBody, ModalFooter, HStack } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { updateImage, saveEditedImageAsNew, EditParams } from '@/lib/actions/image-actions'
+import { updateImage, saveEditedImageAsNew, deleteImage, EditParams } from '@/lib/actions/image-actions'
 import { useRouter } from 'next/navigation'
 import ImageEditor from './ImageEditor'
 import { CldImage } from 'next-cloudinary'
+import ImageTagEditor from './tags/ImageTagEditor'
 
 type DatabaseImage = {
   id: string
@@ -74,6 +76,8 @@ export default function ImageModal({
   
   const [updateState, setUpdateState] = useState<{ success: boolean; message?: string; error?: string }>({ success: false })
   const [isUpdating, setIsUpdating] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // 键盘导航
   useEffect(() => {
@@ -144,11 +148,92 @@ export default function ImageModal({
     setEditTakenAt(image.takenAt ? new Date(image.takenAt).toISOString().slice(0, 16) : '')
   }, [image])
 
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      const result = await deleteImage(image.id)
+      if (result.success) {
+        // 删除成功后，如果有下一张则导航到下一张，否则导航到上一张
+        if (currentIndex < images.length - 1 && onNext) {
+          onNext()
+        } else if (currentIndex > 0 && onPrevious) {
+          onPrevious()
+        } else {
+          // 如果这是最后一张，关闭模态框
+          onClose()
+        }
+        setShowDeleteConfirm(false)
+        // 刷新页面以更新图片列表
+        router.refresh()
+      } else {
+        setUpdateState({
+          success: false,
+          error: result.error || '删除失败'
+        })
+        setShowDeleteConfirm(false)
+      }
+    } catch (error) {
+      setUpdateState({
+        success: false,
+        error: error instanceof Error ? error.message : '删除失败'
+      })
+      setShowDeleteConfirm(false)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
-    <div 
-      className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex items-center justify-center"
-      onClick={onClose}
-    >
+    <>
+      {/* 删除确认模态框 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-60">
+          <Modal
+            size="small"
+            title="删除图片"
+            icon={mdiDelete}
+            onClose={() => setShowDeleteConfirm(false)}
+          >
+          <ModalBody>
+            <p className="text-immich-fg dark:text-immich-dark-fg">
+              确定要删除这张图片吗？此操作无法撤销。
+            </p>
+            {updateState.error && (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                {updateState.error}
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <HStack fullWidth>
+              <Button
+                color="secondary"
+                fullWidth
+                shape="round"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                取消
+              </Button>
+              <Button
+                color="danger"
+                fullWidth
+                shape="round"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                loading={isDeleting}
+              >
+                删除
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </Modal>
+        </div>
+      )}
+
+      <div 
+        className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex items-center justify-center"
+        onClick={onClose}
+      >
       {/* 关闭按钮 */}
       <div className="absolute top-4 right-4 z-10">
         <IconButton
@@ -281,6 +366,19 @@ export default function ImageModal({
             isImageEditing && "bg-immich-primary/50"
           )}
         />
+        <IconButton
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          size="medium"
+          onClick={(e) => {
+            e.stopPropagation()
+            setShowDeleteConfirm(true)
+          }}
+          aria-label="删除"
+          icon={<Icon path={mdiDelete} size={1.2} />}
+          className="bg-black/50 hover:bg-red-500/50 text-white"
+        />
       </div>
 
       {/* 图片显示区域 */}
@@ -335,8 +433,8 @@ export default function ImageModal({
       {(showDetails || isEditing) && !isImageEditing && (
         <div 
           className={cn(
-            "absolute right-0 top-0 h-full w-80 bg-immich-dark-gray dark:bg-immich-dark-bg",
-            "border-l border-immich-dark-gray shadow-2xl",
+            "absolute right-0 top-0 h-full w-80 bg-white dark:bg-immich-dark-bg",
+            "border-l border-gray-200 dark:border-immich-dark-gray shadow-2xl",
             "overflow-y-auto immich-scrollbar",
             "animate-in slide-in-from-right duration-300"
           )}
@@ -344,7 +442,7 @@ export default function ImageModal({
         >
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-immich-dark-fg">
+              <h3 className="text-lg font-semibold text-immich-fg dark:text-immich-dark-fg">
                 {isEditing ? '编辑信息' : '详细信息'}
               </h3>
               <IconButton
@@ -416,28 +514,24 @@ export default function ImageModal({
               </form>
             )}
 
-            {/* 标签 */}
-            {image.tags.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-immich-dark-fg mb-2">标签</h4>
-                <div className="flex flex-wrap gap-2">
-                  {image.tags.map((imageTag) => (
-                    <span
-                      key={imageTag.tag.id}
-                      className="text-xs px-3 py-1 rounded-full bg-immich-primary/20 text-immich-primary dark:bg-immich-dark-primary/20 dark:text-immich-dark-primary font-medium"
-                    >
-                      {imageTag.tag.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* 标签编辑 */}
+            <ImageTagEditor
+              imageId={image.id}
+              currentTags={image.tags.map(it => ({
+                id: it.tag.id,
+                name: it.tag.name,
+                color: it.tag.color
+              }))}
+              onUpdate={() => {
+                router.refresh()
+              }}
+            />
 
             {/* 基本信息 */}
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-medium text-immich-dark-fg mb-2">基本信息</h4>
-                <div className="space-y-2 text-sm text-gray-400">
+                <h4 className="text-sm uppercase immich-form-label mb-2">基本信息</h4>
+                <div className="space-y-2 text-sm text-immich-fg/75 dark:text-immich-dark-fg/75">
                   <div>
                     <span className="font-medium">尺寸:</span> {image.width} × {image.height}
                   </div>
@@ -452,8 +546,8 @@ export default function ImageModal({
 
               {image.takenAt && (
                 <div>
-                  <h4 className="text-sm font-medium text-immich-dark-fg mb-2">拍摄信息</h4>
-                  <div className="space-y-2 text-sm text-gray-400">
+                  <h4 className="text-sm uppercase immich-form-label mb-2">拍摄信息</h4>
+                  <div className="space-y-2 text-sm text-immich-fg/75 dark:text-immich-dark-fg/75">
                     <div>
                       <span className="font-medium">拍摄时间:</span> {new Date(image.takenAt).toLocaleString('zh-CN')}
                     </div>
@@ -477,8 +571,8 @@ export default function ImageModal({
               )}
 
               <div>
-                <h4 className="text-sm font-medium text-immich-dark-fg mb-2">其他信息</h4>
-                <div className="space-y-2 text-sm text-gray-400">
+                <h4 className="text-sm uppercase immich-form-label mb-2">其他信息</h4>
+                <div className="space-y-2 text-sm text-immich-fg/75 dark:text-immich-dark-fg/75">
                   <div>
                     <span className="font-medium">上传时间:</span> {new Date(image.createdAt).toLocaleString('zh-CN')}
                   </div>
@@ -488,6 +582,7 @@ export default function ImageModal({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

@@ -5,6 +5,9 @@ import { cn } from '@/lib/utils'
 import MyImage from '@/components/MyImage'
 import { formatGroupTitle } from '@/lib/utils/timeline-date-format'
 import { getJustifiedLayoutFromAssets, type CommonPosition } from '@/lib/utils/layout-utils'
+import { Icon } from '@mdi/react'
+import { mdiCheckCircle, mdiCheckCircleOutline } from '@mdi/js'
+import { Button } from '@/components/ui'
 
 type DatabaseImage = {
   id: string
@@ -32,6 +35,10 @@ type DatabaseImage = {
 interface TimelineViewProps {
   images: DatabaseImage[]
   onImageClick?: (image: DatabaseImage) => void
+  isSelectionMode?: boolean
+  selectedImageIds?: Set<string>
+  onImageSelect?: (image: DatabaseImage, selected: boolean) => void
+  onShowSelected?: (images: DatabaseImage[]) => void
 }
 
 interface DayGroup {
@@ -56,7 +63,14 @@ interface MonthGroup {
   height: number
 }
 
-export default function TimelineView({ images, onImageClick }: TimelineViewProps) {
+export default function TimelineView({ 
+  images, 
+  onImageClick,
+  isSelectionMode = false,
+  selectedImageIds = new Set(),
+  onImageSelect,
+  onShowSelected
+}: TimelineViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollableRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(1200)
@@ -334,7 +348,8 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
                           className={cn(
                             "absolute group cursor-pointer",
                             "transition-transform duration-150 ease-out",
-                            "hover:z-10"
+                            "hover:z-10",
+                            isSelectionMode && selectedImageIds.has(image.id) && "ring-2 ring-immich-primary ring-offset-2"
                           )}
                           style={{
                             top: `${position.top}px`,
@@ -342,7 +357,13 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
                             width: `${position.width}px`,
                             height: `${position.height}px`,
                           }}
-                          onClick={() => onImageClick?.(image)}
+                          onClick={() => {
+                            if (isSelectionMode) {
+                              onImageSelect?.(image, !selectedImageIds.has(image.id))
+                            } else {
+                              onImageClick?.(image)
+                            }
+                          }}
                         >
                           <MyImage
                             publicId={image.publicId}
@@ -354,6 +375,22 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
                             loading="lazy"
                           />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                          
+                          {/* 选择模式下的选中标记 */}
+                          {isSelectionMode && (
+                            <div className="absolute top-2 right-2">
+                              <Icon
+                                path={selectedImageIds.has(image.id) ? mdiCheckCircle : mdiCheckCircleOutline}
+                                size={1.5}
+                                className={cn(
+                                  "transition-colors",
+                                  selectedImageIds.has(image.id)
+                                    ? "text-immich-primary"
+                                    : "text-white/80"
+                                )}
+                              />
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -373,6 +410,23 @@ export default function TimelineView({ images, onImageClick }: TimelineViewProps
         viewportTopMonth={viewportTopMonth}
         onScrub={handleScrubberClick}
       />
+
+      {/* 展示选定内容按钮 */}
+      {isSelectionMode && selectedImageIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-40">
+          <Button
+            variant="filled"
+            size="large"
+            onClick={() => {
+              const selectedImages = images.filter(img => selectedImageIds.has(img.id))
+              onShowSelected?.(selectedImages)
+            }}
+            className="shadow-lg"
+          >
+            展示选定内容 ({selectedImageIds.size})
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

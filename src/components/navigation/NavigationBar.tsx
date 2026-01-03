@@ -21,6 +21,7 @@ import {
   mdiWeatherNight,
   mdiWeatherSunny,
   mdiImageMultiple,
+  mdiTag,
 } from '@mdi/js'
 
 interface NavigationBarProps {
@@ -306,6 +307,20 @@ function AccountInfoPanel({
             leadingIcon={<Icon path={mdiCog} size={0.8} />}
           >
             账户设置
+          </Button>
+          <Button
+            onClick={() => {
+              window.location.href = '/tags'
+              onClose()
+            }}
+            size="small"
+            color="secondary"
+            variant="ghost"
+            shape="round"
+            className="border dark:border-immich-dark-gray dark:bg-gray-500 dark:hover:bg-immich-dark-primary/50 hover:bg-immich-primary/10 dark:text-white"
+            leadingIcon={<Icon path={mdiTag} size={0.8} />}
+          >
+            标签管理
           </Button>
         </div>
       </div>
