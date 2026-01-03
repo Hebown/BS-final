@@ -38,13 +38,27 @@ export default function UploadPanel() {
               <p className="immich-form-label text-xm">
                 上传进度: {remainingUploads} / {stats.total}
               </p>
-              <p className="immich-form-label text-xs">
-                已上传: <span className="text-success">{stats.success}</span>
-                {' - '}
-                错误: <span className="text-danger">{stats.errors}</span>
-                {' - '}
-                重复: <span className="text-warning">{stats.duplicates}</span>
-              </p>
+              <div className="flex flex-col gap-0.5">
+                <p className="immich-form-label text-xs">
+                  总计: <span className="font-semibold">{stats.total}</span> 个文件
+                </p>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                  <span className="immich-form-label">
+                    成功: <span className="text-success font-semibold">{stats.success}</span>
+                  </span>
+                  <span className="immich-form-label">
+                    失败: <span className="text-danger font-semibold">{stats.errors}</span>
+                  </span>
+                  <span className="immich-form-label">
+                    重复: <span className="text-warning font-semibold">{stats.duplicates}</span>
+                  </span>
+                  {stats.total > 0 && (
+                    <span className="immich-form-label">
+                      进行中: <span className="text-primary font-semibold">{remainingUploads}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex flex-col items-end">
               <div className="flex flex-row">
@@ -103,10 +117,43 @@ export default function UploadPanel() {
           )}
 
           <div className="immich-scrollbar flex max-h-[400px] flex-col gap-2 overflow-y-auto rounded-lg">
-            {uploads.map((upload) => (
-              <UploadAssetPreview key={upload.id} upload={upload} />
-            ))}
+            {uploads.length === 0 ? (
+              <p className="text-center text-xs text-gray-400 py-4">没有上传任务</p>
+            ) : (
+              uploads.map((upload) => (
+                <UploadAssetPreview key={upload.id} upload={upload} />
+              ))
+            )}
           </div>
+          
+          {/* 统计摘要（当有多个任务时显示） */}
+          {stats.total > 1 && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-subtle">
+              <div className="flex items-center justify-between text-xs">
+                <span className="immich-form-label">任务统计</span>
+                <div className="flex gap-3">
+                  <span className={cn(
+                    "px-2 py-1 rounded",
+                    stats.success > 0 ? "bg-success/20 text-success" : "text-gray-400"
+                  )}>
+                    成功: {stats.success}
+                  </span>
+                  <span className={cn(
+                    "px-2 py-1 rounded",
+                    stats.errors > 0 ? "bg-danger/20 text-danger" : "text-gray-400"
+                  )}>
+                    失败: {stats.errors}
+                  </span>
+                  <span className={cn(
+                    "px-2 py-1 rounded",
+                    stats.duplicates > 0 ? "bg-warning/20 text-warning" : "text-gray-400"
+                  )}>
+                    重复: {stats.duplicates}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="relative rounded-full">
