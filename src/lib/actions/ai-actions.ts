@@ -1,8 +1,10 @@
 'use server'
 
-import { pipeline } from '@huggingface/transformers'
 import { prisma } from '@/lib/db'
 import { auth } from '@/lib/auth'
+
+// Hugging Face API 基础 URL
+const HUGGINGFACE_API_BASE = 'https://api-inference.huggingface.co/models'
 
 /**
  * 调用本地 AI 服务（通过 ngrok 等内网穿透工具）
@@ -47,91 +49,73 @@ async function callLocalAIService(
   throw new Error('本地 AI 服务返回格式错误')
 }
 
-// 使用文件系统缓存，而不是内存缓存
-// @huggingface/transformers 会自动将模型文件缓存到磁盘
-// 默认位置：~/.cache/huggingface/transformers 或 process.cwd()/.cache/huggingface/transformers
-// 这样可以避免在内存中保存大型模型实例
-let classifierLoading: Promise<any> | null = null
-let localModelSupported: boolean | null = null // null = 未检测, true = 支持, false = 不支持
-
 /**
- * 获取或加载分类器（使用文件系统缓存）
- * 
- * 注意：
- * - 模型文件会自动缓存在磁盘上，不需要在内存中缓存整个 pipeline 实例
- * - 首次加载时会下载模型文件（约几百MB），需要一些时间
- * - 后续加载会从磁盘缓存读取，速度会快很多
- * - 使用并发锁确保同一时间只有一个加载操作
- * - 如果加载失败（如缺少系统依赖），会标记为不支持本地模型，后续使用本地 AI 服务
+ * 调用 Hugging Face API（降级方案）
  */
-async function getClassifier() {
-  // 如果设置了跳过本地模型，直接抛出错误（触发降级）
-  if (process.env.SKIP_LOCAL_MODEL === 'true') {
-    throw new Error('Local model skipped by SKIP_LOCAL_MODEL environment variable')
+async function callHuggingFaceZeroShotAPI(
+  imageUrl: string,
+  candidateLabels: string[]
+): Promise<Array<{ label: string; score: number }>> {
+  const apiKey = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY
+  if (!apiKey) {
+    throw new Error('未配置 HF_TOKEN 或 HUGGINGFACE_API_KEY，无法使用 API 降级方案')
   }
 
-  // 如果已经检测到不支持本地模型，直接抛出错误（触发降级）
-  if (localModelSupported === false) {
-    throw new Error('Local model not supported, will use local AI service')
-  }
+  console.log('使用 Hugging Face API 降级方案')
 
-  // 如果正在加载，等待加载完成
-  if (classifierLoading) {
-    return classifierLoading
+  // 将图片转换为 base64
+  const response = await fetch(imageUrl)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.statusText}`)
   }
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  const base64 = buffer.toString('base64')
+  const contentType = response.headers.get('content-type') || 'image/jpeg'
+  const imageData = `data:${contentType};base64,${base64}`
 
-  // 开始加载分类器
-  // 注意：使用 Xenova 提供的 ONNX 格式模型（@huggingface/transformers 需要 ONNX 格式）
-  // openai/clip-vit-base-patch32 没有 ONNX 版本，所以使用 Xenova 的版本
-  // 模型文件会自动缓存到磁盘，不需要在内存中保存
-  classifierLoading = pipeline(
-    'zero-shot-image-classification',
-    'Xenova/clip-vit-base-patch32', // Xenova 提供了 ONNX 格式的模型
+  // 调用 Hugging Face Zero-Shot Image Classification API
+  const apiResponse = await fetch(
+    `${HUGGINGFACE_API_BASE}/openai/clip-vit-base-patch32`,
     {
-      // 可选：指定缓存目录（默认使用系统缓存目录）
-      // cache_dir: path.join(process.cwd(), '.cache', 'huggingface', 'transformers')
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: imageData,
+        parameters: {
+          candidate_labels: candidateLabels
+        },
+        options: {
+          wait_for_model: true
+        }
+      })
     }
-  ).then(classifier => {
-    // 加载成功，标记为支持本地模型
-    localModelSupported = true
-    // 加载完成后清除加载状态，但不缓存实例
-    // 让 pipeline 实例在使用后被垃圾回收，避免占用大量内存
-    classifierLoading = null
-    return classifier
-  }).catch(error => {
-    // 加载失败，标记为不支持本地模型
-    localModelSupported = false
-    classifierLoading = null
-    console.error('本地模型加载失败（可能缺少系统依赖），将使用本地 AI 服务:', error)
-    if (error instanceof Error) {
-      console.error('错误消息:', error.message)
-      // 检查是否是 ONNX Runtime 相关的错误
-      if (error.message.includes('libonnxruntime') || error.message.includes('onnxruntime')) {
-        console.error('检测到 ONNX Runtime 依赖缺失，将使用本地 AI 服务（ngrok）')
-      }
-    }
-    throw error
-  })
+  )
 
-  return classifierLoading
-}
-
-/**
- * 将图片 URL 转换为 Buffer（用于本地模型处理）
- * @huggingface/transformers 可以直接接受 URL 或 Buffer
- */
-async function imageUrlToBuffer(imageUrl: string): Promise<Buffer> {
-  try {
-    const response = await fetch(imageUrl)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.statusText}`)
-    }
-    const arrayBuffer = await response.arrayBuffer()
-    return Buffer.from(arrayBuffer)
-  } catch (error) {
-    console.error('Error converting image to buffer:', error)
-    throw error
+  if (!apiResponse.ok) {
+    const errorText = await apiResponse.text()
+    throw new Error(`Hugging Face API 调用失败: ${apiResponse.statusText} - ${errorText}`)
   }
+
+  const result = await apiResponse.json()
+  
+  // API 返回格式：{ labels: string[], scores: number[] }
+  if (result.labels && result.scores) {
+    return result.labels.map((label: string, index: number) => ({
+      label,
+      score: result.scores[index]
+    }))
+  }
+  
+  // 或者返回格式：Array<{ label: string, score: number }>
+  if (Array.isArray(result)) {
+    return result
+  }
+
+  throw new Error('Unexpected API response format')
 }
 
 /**
@@ -230,44 +214,31 @@ export async function analyzeImageWithAI(
     ]
 
     // 开始图片分类
-    // 降级策略：服务器本地模型 -> 本地 AI 服务（ngrok）
+    // 策略：直接使用本地 AI 服务（ngrok），如果失败则使用 Hugging Face API
     console.log('开始进行图片分类，候选标签数量:', candidateLabels.length)
     let results: any
     
     try {
-      // 步骤 1: 尝试使用服务器上的本地模型
-      console.log('尝试使用服务器本地模型...')
-      const classifier = await getClassifier()
-      console.log('分类器加载完成，使用本地模型')
-      
-      // @huggingface/transformers 可以直接接受 URL 字符串或 Buffer
-      // 先尝试直接使用 URL（更高效，不需要下载图片）
-      // 如果 URL 方式失败（如 CORS 问题），则转换为 Buffer
-      try {
-        // 尝试直接使用 URL
-        results = await classifier(imageUrl, candidateLabels)
-      } catch (urlError) {
-        // 如果 URL 方式失败（可能是 CORS 或网络问题），尝试使用 Buffer
-        const errorMsg = urlError instanceof Error ? urlError.message : String(urlError)
-        // 截断过长的错误消息，避免输出大量 base64 字符串
-        const truncatedMsg = errorMsg.length > 200 ? errorMsg.substring(0, 200) + '...' : errorMsg
-        console.log('URL 方式失败，尝试使用 Buffer...', truncatedMsg)
-        const imageBuffer = await imageUrlToBuffer(imageUrl)
-        results = await classifier(imageBuffer, candidateLabels)
-      }
-      console.log('本地模型推理成功')
-    } catch (localModelError) {
-      // 步骤 2: 本地模型失败（如缺少 ONNX Runtime 依赖），使用本地 AI 服务（ngrok）
-      console.log('本地模型不可用，尝试使用本地 AI 服务（ngrok）...')
-      console.error('本地模型错误:', localModelError instanceof Error ? localModelError.message : String(localModelError))
-      
+      // 步骤 1: 优先使用本地 AI 服务（通过 ngrok）
       if (process.env.LOCAL_AI_SERVICE_URL) {
         console.log('调用本地 AI 服务:', process.env.LOCAL_AI_SERVICE_URL)
         results = await callLocalAIService(imageUrl, candidateLabels)
         console.log('本地 AI 服务调用成功，返回结果数量:', Array.isArray(results) ? results.length : 1)
       } else {
+        throw new Error('未配置 LOCAL_AI_SERVICE_URL，尝试使用 Hugging Face API 降级方案')
+      }
+    } catch (localServiceError) {
+      // 步骤 2: 本地服务失败，使用 Hugging Face API 降级
+      console.log('本地 AI 服务不可用，使用 Hugging Face API 降级方案...')
+      console.error('本地服务错误:', localServiceError instanceof Error ? localServiceError.message : String(localServiceError))
+      
+      try {
+        results = await callHuggingFaceZeroShotAPI(imageUrl, candidateLabels)
+        console.log('API 调用成功，返回结果数量:', Array.isArray(results) ? results.length : 1)
+      } catch (apiError) {
+        console.error('所有降级方案都失败:', apiError)
         throw new Error(
-          `本地模型不可用，且未配置 LOCAL_AI_SERVICE_URL。请设置 LOCAL_AI_SERVICE_URL 环境变量（例如：通过 ngrok 获取的 URL）`
+          `所有 AI 服务都不可用: 本地服务(${localServiceError instanceof Error ? localServiceError.message : String(localServiceError)}) | API(${apiError instanceof Error ? apiError.message : String(apiError)})`
         )
       }
     }

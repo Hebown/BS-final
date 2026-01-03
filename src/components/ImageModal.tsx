@@ -202,7 +202,7 @@ export default function ImageModal({
         const tagCount = result.tags?.length || 0
         setUpdateState({
           success: true,
-          message: `AI分析完成，生成了 ${tagCount} 个标签（使用 Taiyi-CLIP）`
+          message: `AI分析完成，生成了 ${tagCount} 个标签（使用本地 AI 模型）`
         })
         // 刷新页面以更新标签
         router.refresh()
@@ -213,9 +213,16 @@ export default function ImageModal({
       } else {
         // 提供更详细的错误信息
         let errorMessage = result.error || 'AI分析失败'
-        if (errorMessage.includes('API密钥') || errorMessage.includes('API key') || errorMessage.includes('HF_TOKEN')) {
+        
+        // 检查是否是本地服务配置问题
+        if (errorMessage.includes('LOCAL_AI_SERVICE_URL') || errorMessage.includes('本地 AI 服务')) {
+          errorMessage = '未配置本地 AI 服务。请设置 LOCAL_AI_SERVICE_URL 环境变量（通过 ngrok 获取的 URL）。'
+        } else if (errorMessage.includes('API密钥') || errorMessage.includes('API key') || errorMessage.includes('HF_TOKEN')) {
           errorMessage = '未配置AI API密钥。请设置 HF_TOKEN 环境变量。'
+        } else if (errorMessage.includes('ONNX') || errorMessage.includes('libonnxruntime')) {
+          errorMessage = '服务器缺少 ONNX Runtime 依赖。请配置本地 AI 服务（LOCAL_AI_SERVICE_URL）或 Hugging Face API（HF_TOKEN）。'
         }
+        
         setUpdateState({
           success: false,
           error: errorMessage
@@ -223,9 +230,18 @@ export default function ImageModal({
       }
     } catch (error) {
       console.error('AI分析异常:', error)
+      let errorMessage = error instanceof Error ? error.message : 'AI分析失败，请稍后重试'
+      
+      // 检查是否是本地服务配置问题
+      if (errorMessage.includes('LOCAL_AI_SERVICE_URL') || errorMessage.includes('本地 AI 服务')) {
+        errorMessage = '未配置本地 AI 服务。请设置 LOCAL_AI_SERVICE_URL 环境变量（通过 ngrok 获取的 URL）。'
+      } else if (errorMessage.includes('ONNX') || errorMessage.includes('libonnxruntime')) {
+        errorMessage = '服务器缺少 ONNX Runtime 依赖。请配置本地 AI 服务（LOCAL_AI_SERVICE_URL）或 Hugging Face API（HF_TOKEN）。'
+      }
+      
       setUpdateState({
         success: false,
-        error: error instanceof Error ? error.message : 'AI分析失败，请稍后重试'
+        error: errorMessage
       })
     } finally {
       setIsAnalyzing(false)
@@ -480,7 +496,7 @@ export default function ImageModal({
             isAnalyzing && "opacity-50 cursor-wait"
           )}
           disabled={isAnalyzing}
-          title={isAnalyzing ? "AI分析中..." : "使用Taiyi-CLIP模型分析图片内容并自动生成标签"}
+          title={isAnalyzing ? "AI分析中..." : "使用本地 AI 模型分析图片内容并自动生成标签"}
         />
         {showBatchDelete && onBatchDelete && (
           <IconButton
