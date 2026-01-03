@@ -53,16 +53,29 @@ export default function ImageTagEditor({
     tag.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const handleTagToggle = (tagId: string) => {
-    setSelectedTagIds(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(tagId)) {
-        newSet.delete(tagId)
-      } else {
-        newSet.add(tagId)
+  const handleTagToggle = async (tagId: string) => {
+    const newSet = new Set(selectedTagIds)
+    if (newSet.has(tagId)) {
+      newSet.delete(tagId)
+    } else {
+      newSet.add(tagId)
+    }
+    setSelectedTagIds(newSet)
+    
+    // 自动保存：选中或取消选中标签时立即保存
+    setIsSubmitting(true)
+    try {
+      const result = await setImageTags(imageId, Array.from(newSet))
+      if (result.success) {
+        await loadTags()
+        // 确保刷新在操作完成后执行
+        onUpdate?.()
       }
-      return newSet
-    })
+    } catch (error) {
+      console.error('保存标签失败:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleCreateTag = async () => {
@@ -72,10 +85,20 @@ export default function ImageTagEditor({
     try {
       const result = await createOrUpdateTag(newTagName.trim())
       if (result.success && result.data) {
-        setAllTags(prev => [...prev, result.data!])
-        setSelectedTagIds(prev => new Set([...prev, result.data!.id]))
+        // 重新加载所有标签，确保数据是最新的
+        await loadTags()
+        // 自动选中新创建的标签并立即保存
+        const newSet = new Set([...selectedTagIds, result.data!.id])
+        setSelectedTagIds(newSet)
         setNewTagName('')
         setShowCreateTag(false)
+        
+        // 自动保存：创建标签后立即添加到图片并保存
+        const saveResult = await setImageTags(imageId, Array.from(newSet))
+        if (saveResult.success) {
+          // 确保刷新在操作完成后执行
+          onUpdate?.()
+        }
       }
     } catch (error) {
       console.error('创建标签失败:', error)
@@ -89,6 +112,9 @@ export default function ImageTagEditor({
     try {
       const result = await setImageTags(imageId, Array.from(selectedTagIds))
       if (result.success) {
+        // 重新加载标签列表，确保新创建的标签被包含
+        await loadTags()
+        // 调用更新回调，刷新父组件
         onUpdate?.()
       }
     } catch (error) {
@@ -107,15 +133,9 @@ export default function ImageTagEditor({
           <Icon path={mdiTag} size={1} />
           标签
         </h4>
-        <Button
-          variant="ghost"
-          size="small"
-          onClick={handleSave}
-          disabled={isSubmitting}
-          className="text-xs"
-        >
-          {isSubmitting ? '保存中...' : '保存'}
-        </Button>
+        {isSubmitting && (
+          <span className="text-xs text-gray-400">保存中...</span>
+        )}
       </div>
 
       {/* 搜索和创建 */}

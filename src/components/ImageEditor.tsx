@@ -96,14 +96,25 @@ export default function ImageEditor({
     // 应用旋转
     if (angle !== 0) {
       ctx.save()
+      // 移动到画布中心
       ctx.translate(canvasWidth / 2, canvasHeight / 2)
+      // 旋转
       ctx.rotate(angle * Math.PI / 180)
-      ctx.translate(-displayWidth / 2, -displayHeight / 2)
+      // 根据旋转角度调整平移，确保图片居中
+      // 旋转后，图片的显示尺寸需要根据角度调整
+      if (angle === 90 || angle === 270) {
+        // 90 度或 270 度旋转：宽高已交换，平移时也要交换
+        ctx.translate(-displayHeight / 2, -displayWidth / 2)
+      } else {
+        // 180 度或其他角度：保持原宽高
+        ctx.translate(-displayWidth / 2, -displayHeight / 2)
+      }
     } else {
+      // 无旋转：居中显示
       ctx.translate((canvasWidth - displayWidth) / 2, (canvasHeight - displayHeight) / 2)
     }
 
-    // 绘制图片
+    // 绘制图片（始终使用原始显示尺寸）
     ctx.drawImage(originalImg, 0, 0, displayWidth, displayHeight)
 
     if (angle !== 0) {

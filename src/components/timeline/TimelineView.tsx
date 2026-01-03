@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import MyImage from '@/components/MyImage'
+import LazyImage from '@/components/LazyImage'
 import { formatGroupTitle } from '@/lib/utils/timeline-date-format'
 import { getJustifiedLayoutFromAssets, type CommonPosition } from '@/lib/utils/layout-utils'
 import { Icon } from '@mdi/react'
@@ -79,6 +79,9 @@ export default function TimelineView({
   const rowHeight = 235
   const spacing = 4
   const dayGroupSpacing = 32
+  
+  // 虚拟滚动配置：只渲染视口内和附近的图片
+  const RENDER_BUFFER = 500 // 视口上下各多渲染 500px 的内容
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -288,6 +291,29 @@ export default function TimelineView({
     return null
   }, [scrollTop, viewportHeight, monthGroups])
 
+  // 计算可见区域：只渲染视口内和缓冲区内的图片
+  const visibleRange = useMemo(() => {
+    const viewportTop = scrollTop - RENDER_BUFFER
+    const viewportBottom = scrollTop + viewportHeight + RENDER_BUFFER
+    
+    // 找出所有在可见范围内的 dayGroup
+    const visibleDayGroups: Set<string> = new Set()
+    
+    monthGroups.forEach((monthGroup) => {
+      monthGroup.dayGroups.forEach((dayGroup) => {
+        const dayGroupTop = dayGroup.top
+        const dayGroupBottom = dayGroup.top + dayGroup.height
+        
+        // 如果 dayGroup 与可见区域有交集，标记为可见
+        if (viewportTop <= dayGroupBottom && viewportBottom >= dayGroupTop) {
+          visibleDayGroups.add(`${dayGroup.dateString}-${dayGroup.date.getTime()}`)
+        }
+      })
+    })
+    
+    return visibleDayGroups
+  }, [scrollTop, viewportHeight, monthGroups, RENDER_BUFFER])
+
   const handleScrubberClick = (year: number, month: number, percent: number) => {
     const monthGroup = monthGroups.find(m => m.year === year && m.month === month)
     if (monthGroup && scrollableRef.current) {
@@ -315,89 +341,125 @@ export default function TimelineView({
       >
         <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
           {monthGroups.map((monthGroup) => (
-            monthGroup.dayGroups.map((dayGroup) => (
-              <section
-                key={`${dayGroup.dateString}-${dayGroup.date.getTime()}`}
-                className="absolute"
-                style={{
-                  top: `${dayGroup.top}px`,
-                  left: `${dayGroup.left}px`,
-                  width: `${dayGroup.width}px`,
-                }}
-              >
-                <div className="flex pt-7 pb-5 max-md:pt-5 max-md:pb-3 h-6 place-items-center text-xs font-medium text-immich-fg dark:text-immich-dark-fg md:text-sm">
-                  <span className="w-full truncate first-letter:capitalize" title={dayGroup.date.toLocaleDateString('zh-CN')}>
-                    {dayGroup.dateString}
-                  </span>
-                </div>
-
-                {dayGroup.layout && (
-                  <div 
-                    className="relative overflow-clip"
-                    style={{ 
-                      height: `${dayGroup.layout.containerHeight}px`,
-                      width: `${dayGroup.width}px`
+            monthGroup.dayGroups.map((dayGroup) => {
+              const dayGroupKey = `${dayGroup.dateString}-${dayGroup.date.getTime()}`
+              const isVisible = visibleRange.has(dayGroupKey)
+              
+              // 如果不在可见范围内，只渲染占位符以保持布局
+              if (!isVisible) {
+                return (
+                  <section
+                    key={dayGroupKey}
+                    className="absolute"
+                    style={{
+                      top: `${dayGroup.top}px`,
+                      left: `${dayGroup.left}px`,
+                      width: `${dayGroup.width}px`,
                     }}
                   >
-                    {dayGroup.images.map((image, index) => {
-                      const position = dayGroup.layout!.positions[index]
-                      
-                      return (
-                        <div
-                          key={image.id}
-                          className={cn(
-                            "absolute group cursor-pointer",
-                            "transition-transform duration-150 ease-out",
-                            "hover:z-10",
-                            isSelectionMode && selectedImageIds.has(image.id) && "ring-2 ring-immich-primary ring-offset-2"
-                          )}
-                          style={{
-                            top: `${position.top}px`,
-                            left: `${position.left}px`,
-                            width: `${position.width}px`,
-                            height: `${position.height}px`,
-                          }}
-                          onClick={() => {
-                            if (isSelectionMode) {
-                              onImageSelect?.(image, !selectedImageIds.has(image.id))
-                            } else {
-                              onImageClick?.(image)
-                            }
-                          }}
-                        >
-                          <MyImage
-                            publicId={image.publicId}
-                            secureUrl={image.secureUrl}
-                            width={position.width}
-                            height={position.height}
-                            alt={image.title || `图片 ${image.publicId}`}
-                            className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
-                            loading="lazy"
-                          />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
-                          
-                          {/* 选择模式下的选中标记 */}
-                          {isSelectionMode && (
-                            <div className="absolute top-2 right-2">
-                              <Icon
-                                path={selectedImageIds.has(image.id) ? mdiCheckCircle : mdiCheckCircleOutline}
-                                size={1.5}
-                                className={cn(
-                                  "transition-colors",
-                                  selectedImageIds.has(image.id)
-                                    ? "text-immich-primary"
-                                    : "text-white/80"
-                                )}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                    <div className="flex pt-7 pb-5 max-md:pt-5 max-md:pb-3 h-6 place-items-center text-xs font-medium text-immich-fg dark:text-immich-dark-fg md:text-sm">
+                      <span className="w-full truncate first-letter:capitalize" title={dayGroup.date.toLocaleDateString('zh-CN')}>
+                        {dayGroup.dateString}
+                      </span>
+                    </div>
+                    {dayGroup.layout && (
+                      <div 
+                        className="relative overflow-clip"
+                        style={{ 
+                          height: `${dayGroup.layout.containerHeight}px`,
+                          width: `${dayGroup.width}px`
+                        }}
+                      />
+                    )}
+                  </section>
+                )
+              }
+              
+              return (
+                <section
+                  key={dayGroupKey}
+                  className="absolute"
+                  style={{
+                    top: `${dayGroup.top}px`,
+                    left: `${dayGroup.left}px`,
+                    width: `${dayGroup.width}px`,
+                  }}
+                >
+                  <div className="flex pt-7 pb-5 max-md:pt-5 max-md:pb-3 h-6 place-items-center text-xs font-medium text-immich-fg dark:text-immich-dark-fg md:text-sm">
+                    <span className="w-full truncate first-letter:capitalize" title={dayGroup.date.toLocaleDateString('zh-CN')}>
+                      {dayGroup.dateString}
+                    </span>
                   </div>
-                )}
-              </section>
-            ))
+
+                  {dayGroup.layout && (
+                    <div 
+                      className="relative overflow-clip"
+                      style={{ 
+                        height: `${dayGroup.layout.containerHeight}px`,
+                        width: `${dayGroup.width}px`
+                      }}
+                    >
+                      {dayGroup.images.map((image, index) => {
+                        const position = dayGroup.layout!.positions[index]
+                        
+                        return (
+                          <div
+                            key={image.id}
+                            className={cn(
+                              "absolute group cursor-pointer",
+                              "transition-transform duration-150 ease-out",
+                              "hover:z-10",
+                              isSelectionMode && selectedImageIds.has(image.id) && "ring-2 ring-immich-primary ring-offset-2"
+                            )}
+                            style={{
+                              top: `${position.top}px`,
+                              left: `${position.left}px`,
+                              width: `${position.width}px`,
+                              height: `${position.height}px`,
+                            }}
+                            onClick={() => {
+                              if (isSelectionMode) {
+                                onImageSelect?.(image, !selectedImageIds.has(image.id))
+                              } else {
+                                onImageClick?.(image)
+                              }
+                            }}
+                          >
+                            <LazyImage
+                              publicId={image.publicId}
+                              secureUrl={image.secureUrl}
+                              width={position.width}
+                              height={position.height}
+                              alt={image.title || `图片 ${image.publicId}`}
+                              className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+                              placeholder="skeleton"
+                              rootMargin="300px" // 提前 300px 开始加载
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+                            
+                            {/* 选择模式下的选中标记 */}
+                            {isSelectionMode && (
+                              <div className="absolute top-2 right-2">
+                                <Icon
+                                  path={selectedImageIds.has(image.id) ? mdiCheckCircle : mdiCheckCircleOutline}
+                                  size={1.5}
+                                  className={cn(
+                                    "transition-colors",
+                                    selectedImageIds.has(image.id)
+                                      ? "text-immich-primary"
+                                      : "text-white/80"
+                                  )}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </section>
+              )
+            })
           ))}
         </div>
       </div>

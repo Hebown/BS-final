@@ -43,8 +43,10 @@ interface UploadStore {
   
   // Actions
   addItem: (asset: UploadAsset) => void
+  addItems: (assets: UploadAsset[]) => void
   updateItem: (id: string, partial: Partial<UploadAsset>) => void
   removeItem: (id: string) => void
+  removeItems: (ids: string[]) => void
   markStarted: (id: string) => void
   updateProgress: (id: string, loaded: number, total: number) => void
   track: (type: 'success' | 'error' | 'duplicate') => void
@@ -53,11 +55,18 @@ interface UploadStore {
 }
 
 const calculateStats = (uploads: UploadAsset[]): UploadStats => {
+  // 计算各种状态的数量
+  const success = uploads.filter(u => u.state === UploadState.DONE).length
+  const errors = uploads.filter(u => u.state === UploadState.ERROR).length
+  const duplicates = uploads.filter(u => u.state === UploadState.DUPLICATED).length
+  const pending = uploads.filter(u => u.state === UploadState.PENDING).length
+  const started = uploads.filter(u => u.state === UploadState.STARTED).length
+  
   return {
     total: uploads.length,
-    success: uploads.filter(u => u.state === UploadState.DONE).length,
-    errors: uploads.filter(u => u.state === UploadState.ERROR).length,
-    duplicates: uploads.filter(u => u.state === UploadState.DUPLICATED).length,
+    success,
+    errors,
+    duplicates,
   }
 }
 
@@ -92,6 +101,16 @@ const uploadStoreCreator: StateCreator<UploadStore> = (set, get) => {
       })
       updateStats()
     },
+    
+    // 批量添加多个文件（减少重新渲染）
+    addItems: (assets: UploadAsset[]) => {
+      set((state: UploadStore) => {
+        const newUploads = assets.map(asset => ({ ...asset, state: UploadState.PENDING }))
+        const uploads = [...state.uploads, ...newUploads]
+        return { uploads }
+      })
+      updateStats()
+    },
 
     updateItem: (id: string, partial: Partial<UploadAsset>) => {
       set((state: UploadStore) => {
@@ -106,6 +125,16 @@ const uploadStoreCreator: StateCreator<UploadStore> = (set, get) => {
     removeItem: (id: string) => {
       set((state: UploadStore) => {
         const uploads = state.uploads.filter((u: UploadAsset) => u.id !== id)
+        return { uploads }
+      })
+      updateStats()
+    },
+    
+    // 批量移除多个项目（减少重新渲染）
+    removeItems: (ids: string[]) => {
+      set((state: UploadStore) => {
+        const idsSet = new Set(ids)
+        const uploads = state.uploads.filter((u: UploadAsset) => !idsSet.has(u.id))
         return { uploads }
       })
       updateStats()
@@ -128,6 +157,12 @@ const uploadStoreCreator: StateCreator<UploadStore> = (set, get) => {
       const { uploads } = get()
       const upload = uploads.find((u: UploadAsset) => u.id === id)
       
+      // 优化：只在进度变化超过 1% 时才更新，减少不必要的状态更新
+      const currentProgress = upload?.progress || 0
+      if (Math.abs(progress - currentProgress) < 1 && upload?.total === total) {
+        return // 进度变化小于 1%，跳过更新
+      }
+      
       if (upload && upload.startDate) {
         const elapsed = (Date.now() - upload.startDate) / 1000
         const speed = loaded / elapsed
@@ -149,7 +184,8 @@ const uploadStoreCreator: StateCreator<UploadStore> = (set, get) => {
           return { uploads }
         })
       }
-      updateStats()
+      // 优化：进度更新不立即更新统计，减少计算频率
+      // updateStats() 会在关键状态变化时调用
     },
 
     track: (type: 'success' | 'error' | 'duplicate') => {

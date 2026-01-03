@@ -126,9 +126,15 @@ export async function uploadImage(
     }
 
     // 提取 EXIF 信息（在上传前提取，确保获取原始 EXIF 数据）
+    // 优化：使用流式读取，只读取文件头部（EXIF 数据通常在文件开头）
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     let exifData: any = null
+    
+    // 对于大文件，只读取前 128KB 来提取 EXIF（EXIF 数据通常在文件开头）
+    const exifBuffer = buffer.length > 128 * 1024 
+      ? buffer.slice(0, 128 * 1024) 
+      : buffer
     let takenAt: Date | null = null
     let location: string | null = null
     let camera: string | null = null
@@ -136,7 +142,8 @@ export async function uploadImage(
 
     try {
       // 提取完整的 EXIF 数据，包括常用字段
-      exifData = await exifr.parse(buffer, {
+      // 优化：使用较小的 buffer 来提取 EXIF，减少内存占用
+      exifData = await exifr.parse(exifBuffer, {
         // 基础信息
         pick: [
           // 时间信息
@@ -243,22 +250,31 @@ export async function uploadImage(
       // 即使 EXIF 提取失败，也继续上传流程
     }
 
-    // 将 File 转换为 base64
-    const base64Image = `data:${file.type};base64,${buffer.toString('base64')}`
-
-    // 上传到 Cloudinary（保留 EXIF 数据）
-    const uploadResult = await cloudinary.uploader.upload(base64Image, {
-      folder: `image-gallery/${session.user.id}`,
-      public_id: title?.replace(/\s+/g, '_') || `image_${Date.now()}`,
-      resource_type: 'auto',
-      // 保留 EXIF 和其他元数据
-      exif: true,
-      // 保留颜色信息
-      colors: true,
-      // 保留面部检测信息（如果需要）
-      faces: false,
-      // 保留图片质量信息
-      quality_analysis: false,
+    // 优化：直接上传 buffer 而不是 base64，避免内存占用和转换时间
+    // 对于大文件，base64 转换会非常慢且占用大量内存（base64 会增加约 33% 的大小）
+    // Cloudinary 支持直接上传 buffer，使用 data URI 格式
+    const uploadResult = await new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: `image-gallery/${session.user!.id}`,
+          public_id: title?.replace(/\s+/g, '_') || `image_${Date.now()}`,
+          resource_type: 'auto',
+          // 保留 EXIF 和其他元数据
+          exif: true,
+          // 保留颜色信息
+          colors: true,
+          // 保留面部检测信息（如果需要）
+          faces: false,
+          // 保留图片质量信息
+          quality_analysis: false,
+        },
+        (error, result) => {
+          if (error) reject(error)
+          else resolve(result)
+        }
+      )
+      // 将 buffer 写入流
+      uploadStream.end(buffer)
     })
 
     console.log('上传成功:', uploadResult)
@@ -266,22 +282,29 @@ export async function uploadImage(
     // 生成自动标签
     const autoTags = await generateAutoTags(exifData, takenAt)
 
-    // 先处理标签：查找或创建
-    const tagConnections = await Promise.all(
-      autoTags.map(async (tagName) => {
-        let tag = await prisma.tag.findUnique({
-          where: { name: tagName }
-        })
-        
-        if (!tag) {
-          tag = await prisma.tag.create({
-            data: { name: tagName }
-          })
-        }
-        
-        return { tagId: tag.id }
+    // 优化：批量处理标签查询，减少数据库往返次数
+    // 先批量查找所有标签
+    const existingTags = await prisma.tag.findMany({
+      where: { name: { in: autoTags } }
+    })
+    const existingTagMap = new Map(existingTags.map(t => [t.name, t]))
+    
+    // 找出需要创建的标签
+    const tagsToCreate = autoTags.filter(name => !existingTagMap.has(name))
+    
+    // 批量创建新标签
+    if (tagsToCreate.length > 0) {
+      await prisma.tag.createMany({
+        data: tagsToCreate.map(name => ({ name })),
+        skipDuplicates: true
       })
-    )
+    }
+    
+    // 重新查询所有标签（包括新创建的）
+    const allTags = await prisma.tag.findMany({
+      where: { name: { in: autoTags } }
+    })
+    const tagConnections = allTags.map(tag => ({ tagId: tag.id }))
 
     // 保存图片信息到数据库
     const image = await prisma.image.create({

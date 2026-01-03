@@ -25,6 +25,22 @@ const nextConfig: NextConfig = {
   },
   // 启用静态优化
   compress: true,
+  // 修复 fs 和 zlib 错误：将 Node.js 模块标记为外部包，只在服务器端使用
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // 在客户端构建中，忽略 Node.js 模块
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        zlib: false,
+        stream: false,
+        crypto: false,
+        path: false,
+        os: false,
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

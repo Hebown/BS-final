@@ -127,10 +127,8 @@ export default function ImageModal({
       
       if (result.success) {
         setIsEditing(false)
-        // 延迟刷新，让用户看到成功消息
-        setTimeout(() => {
-          router.refresh() // 刷新页面以更新时间轴
-        }, 500)
+        // 立即刷新页面以更新时间轴
+        router.refresh()
       }
     } catch (error) {
       setUpdateState({
@@ -234,8 +232,11 @@ export default function ImageModal({
         className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex items-center justify-center"
         onClick={onClose}
       >
-      {/* 关闭按钮 */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* 关闭按钮 - 调整位置避免与信息栏关闭按钮重合 */}
+      <div className={cn(
+        "absolute top-4 z-10 transition-all",
+        showDetails || isEditing ? "right-84" : "right-4"
+      )}>
         <IconButton
           variant="ghost"
           shape="round"
@@ -248,11 +249,15 @@ export default function ImageModal({
         />
       </div>
 
-      {/* 导航按钮 */}
+      {/* 导航按钮 - 调整位置避免覆盖信息栏 */}
       {images.length > 1 && (
         <>
           {currentIndex > 0 && onPrevious && (
-            <div className="absolute left-4 z-10">
+            <div className={cn(
+              "absolute z-10 transition-all",
+              showDetails || isEditing ? "left-4" : "left-4",
+              showDetails || isEditing ? "bottom-1/2 translate-y-1/2" : "top-1/2 -translate-y-1/2"
+            )}>
               <IconButton
                 variant="ghost"
                 shape="round"
@@ -269,7 +274,11 @@ export default function ImageModal({
             </div>
           )}
           {currentIndex < images.length - 1 && onNext && (
-            <div className="absolute right-4 z-10">
+            <div className={cn(
+              "absolute z-10 transition-all",
+              showDetails || isEditing ? "right-84" : "right-4",
+              showDetails || isEditing ? "bottom-1/2 translate-y-1/2" : "top-1/2 -translate-y-1/2"
+            )}>
               <IconButton
                 variant="ghost"
                 shape="round"
@@ -301,7 +310,10 @@ export default function ImageModal({
           }}
           aria-label={isFavorite ? "取消收藏" : "收藏"}
           icon={<Icon path={isFavorite ? mdiHeart : mdiHeartOutline} size={1.2} />}
-          className="bg-black/50 hover:bg-black/70 text-white"
+          className={cn(
+            "bg-black/50 hover:bg-black/70 text-white",
+            isFavorite && "bg-immich-primary/50"
+          )}
         />
         <IconButton
           variant="ghost"
@@ -323,7 +335,14 @@ export default function ImageModal({
           size="medium"
           onClick={(e) => {
             e.stopPropagation()
-            setShowDetails(!showDetails)
+            // 互斥逻辑：如果当前已显示，则关闭；否则关闭其他，打开这个
+            if (showDetails) {
+              setShowDetails(false)
+            } else {
+              setShowDetails(true)
+              setIsEditing(false)
+              setIsImageEditing(false)
+            }
           }}
           aria-label="详情"
           icon={<Icon path={mdiInformationOutline} size={1.2} />}
@@ -339,8 +358,14 @@ export default function ImageModal({
           size="medium"
           onClick={(e) => {
             e.stopPropagation()
-            setIsEditing(!isEditing)
-            setIsImageEditing(false) // 关闭图片编辑
+            // 互斥逻辑：如果当前已显示，则关闭；否则关闭其他，打开这个
+            if (isEditing) {
+              setIsEditing(false)
+            } else {
+              setIsEditing(true)
+              setShowDetails(false)
+              setIsImageEditing(false)
+            }
           }}
           aria-label="编辑信息"
           icon={<Icon path={mdiPencil} size={1.2} />}
@@ -356,8 +381,14 @@ export default function ImageModal({
           size="medium"
           onClick={(e) => {
             e.stopPropagation()
-            setIsImageEditing(!isImageEditing)
-            setIsEditing(false) // 关闭元数据编辑
+            // 互斥逻辑：如果当前已显示，则关闭；否则关闭其他，打开这个
+            if (isImageEditing) {
+              setIsImageEditing(false)
+            } else {
+              setIsImageEditing(true)
+              setShowDetails(false)
+              setIsEditing(false)
+            }
           }}
           aria-label="编辑图片"
           icon={<Icon path={mdiImageEditOutline} size={1.2} />}
@@ -396,8 +427,10 @@ export default function ImageModal({
                 onSave={async (editParams, imageData, overwrite) => {
                   const result = await saveEditedImageAsNew(image.id, editParams, imageData, overwrite)
                   if (result.success) {
-                    // 保存成功后刷新页面
+                    // 保存成功后立即刷新页面
                     router.refresh()
+                    // 关闭编辑模式
+                    setIsImageEditing(false)
                   }
                   return result
                 }}
