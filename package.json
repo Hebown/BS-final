@@ -11,6 +11,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@huggingface/inference": "^4.13.5",
+    "@huggingface/transformers": "^3.8.1",
     "@mdi/js": "^7.4.47",
     "@mdi/react": "^1.6.1",
     "@neondatabase/serverless": "^1.0.2",

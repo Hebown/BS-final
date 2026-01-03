@@ -15,6 +15,7 @@ import {
   mdiPencil,
   mdiImageEditOutline,
   mdiDelete,
+  mdiAutoFix,
 } from '@mdi/js'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button, Input, Field, Modal, ModalBody, ModalFooter, HStack } from '@/components/ui'
@@ -24,6 +25,7 @@ import { useRouter } from 'next/navigation'
 import ImageEditor from './ImageEditor'
 import { CldImage } from 'next-cloudinary'
 import ImageTagEditor from './tags/ImageTagEditor'
+import { analyzeImageWithAI } from '@/lib/actions/ai-actions'
 
 type DatabaseImage = {
   id: string
@@ -80,10 +82,11 @@ export default function ImageModal({
   const router = useRouter()
   const currentIndex = images.findIndex(img => img.id === image.id)
   
-  const [updateState, setUpdateState] = useState<{ success: boolean; message?: string; error?: string }>({ success: false })
+  const [updateState, setUpdateState] = useState<{ success: boolean; message?: string; error?: string; provider?: string }>({ success: false })
   const [isUpdating, setIsUpdating] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   // 键盘导航
   useEffect(() => {
@@ -187,6 +190,45 @@ export default function ImageModal({
       setShowDeleteConfirm(false)
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const handleAIAnalyze = async () => {
+    setIsAnalyzing(true)
+    setUpdateState({ success: false })
+    try {
+      const result = await analyzeImageWithAI(image.id, image.secureUrl)
+      if (result.success) {
+        const tagCount = result.tags?.length || 0
+        setUpdateState({
+          success: true,
+          message: `AI分析完成，生成了 ${tagCount} 个标签（使用 Taiyi-CLIP）`
+        })
+        // 刷新页面以更新标签
+        router.refresh()
+        // 3秒后自动清除成功消息
+        setTimeout(() => {
+          setUpdateState({ success: false })
+        }, 3000)
+      } else {
+        // 提供更详细的错误信息
+        let errorMessage = result.error || 'AI分析失败'
+        if (errorMessage.includes('API密钥') || errorMessage.includes('API key') || errorMessage.includes('HF_TOKEN')) {
+          errorMessage = '未配置AI API密钥。请设置 HF_TOKEN 环境变量。'
+        }
+        setUpdateState({
+          success: false,
+          error: errorMessage
+        })
+      }
+    } catch (error) {
+      console.error('AI分析异常:', error)
+      setUpdateState({
+        success: false,
+        error: error instanceof Error ? error.message : 'AI分析失败，请稍后重试'
+      })
+    } finally {
+      setIsAnalyzing(false)
     }
   }
 
@@ -422,6 +464,24 @@ export default function ImageModal({
             isImageEditing && "bg-immich-primary/50"
           )}
         />
+        <IconButton
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          size="medium"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleAIAnalyze()
+          }}
+          aria-label="AI分析"
+          icon={<Icon path={mdiAutoFix} size={1.2} />}
+          className={cn(
+            "bg-black/50 hover:bg-black/70 text-white",
+            isAnalyzing && "opacity-50 cursor-wait"
+          )}
+          disabled={isAnalyzing}
+          title={isAnalyzing ? "AI分析中..." : "使用Taiyi-CLIP模型分析图片内容并自动生成标签"}
+        />
         {showBatchDelete && onBatchDelete && (
           <IconButton
             variant="ghost"
@@ -579,7 +639,9 @@ export default function ImageModal({
                 )}
 
                 {updateState.success && (
-                  <div className="text-sm text-success-500">{updateState.message}</div>
+                  <div className="text-sm text-success-500">
+                    {updateState.message}
+                  </div>
                 )}
 
                 <div className="flex gap-2">
