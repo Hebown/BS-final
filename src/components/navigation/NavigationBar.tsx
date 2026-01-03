@@ -20,9 +20,9 @@ import {
   mdiMagnify,
   mdiWeatherNight,
   mdiWeatherSunny,
-  mdiImageMultiple,
   mdiTag,
 } from '@mdi/js'
+import Logo from '@/components/shared/Logo'
 
 interface NavigationBarProps {
   showUploadButton?: boolean
@@ -85,9 +85,11 @@ export default function NavigationBar({
             icon={<Icon path={mdiMenu} size={1} />}
           />
           <Link href="/dashboard" className="flex items-center">
-            <div className="w-10 h-10 rounded-full bg-immich-primary dark:bg-immich-dark-primary flex items-center justify-center max-md:h-12 max-md:w-12">
-              <Icon path={mdiImageMultiple} size={1.2} className="text-white" />
-            </div>
+            <Logo 
+              size={40} 
+              className="max-md:w-12 max-md:h-12"
+              showBackground={true}
+            />
           </Link>
         </div>
 
