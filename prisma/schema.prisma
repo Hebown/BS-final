@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
 }
 
 model User {
@@ -53,6 +53,7 @@ model Image {
   // 编辑信息
   editParams Json? // 存储编辑参数（裁剪、色调等）
 
+  @@map("Image")
   @@index([userId])
   @@index([takenAt])
   @@index([createdAt])

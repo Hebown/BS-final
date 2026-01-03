@@ -25,6 +25,7 @@
     "cloudinary": "^2.8.0",
     "clsx": "^2.1.1",
     "exifr": "^7.1.3",
+    "framer-motion": "^12.23.26",
     "justified-layout": "^4.1.0",
     "luxon": "^3.7.2",
     "next": "^16.1.1",

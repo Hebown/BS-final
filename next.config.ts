@@ -11,8 +11,20 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+    // 图片优化和缓存配置
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60, // 缓存 60 秒
   },
-
+  // 增加请求体大小限制（用于文件上传）
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb', // 允许上传最大 50MB 的文件
+    },
+  },
+  // 启用静态优化
+  compress: true,
 };
 
 export default nextConfig;
