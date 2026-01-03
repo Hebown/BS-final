@@ -16,9 +16,36 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false)
   const searchKeyword = searchParams.get('q') || ''
   const [previousRoute, setPreviousRoute] = useState('/dashboard')
-  const [filters, setFilters] = useState<SearchParams>({
-    keyword: searchKeyword || undefined,
-  })
+  
+  // 从 URL 参数构建筛选条件
+  const buildFiltersFromParams = (): SearchParams => {
+    const filters: SearchParams = {
+      keyword: searchParams.get('q') || undefined,
+    }
+    const tags = searchParams.get('tags')
+    if (tags) {
+      filters.tags = tags.split(',').filter(Boolean)
+    }
+    const startDate = searchParams.get('startDate')
+    if (startDate) {
+      filters.startDate = startDate
+    }
+    const endDate = searchParams.get('endDate')
+    if (endDate) {
+      filters.endDate = endDate
+    }
+    const camera = searchParams.get('camera')
+    if (camera) {
+      filters.camera = camera
+    }
+    const location = searchParams.get('location')
+    if (location) {
+      filters.location = location
+    }
+    return filters
+  }
+
+  const [filters, setFilters] = useState<SearchParams>(buildFiltersFromParams())
   const [searchValue, setSearchValue] = useState(searchKeyword)
 
   // 记录之前的路由
@@ -54,11 +81,18 @@ export default function SearchPage() {
 
   // 监听 URL 参数变化
   useEffect(() => {
-    const keyword = searchParams.get('q')
-    if (keyword !== filters.keyword) {
-      setFilters({ keyword: keyword || undefined })
+    const newFilters = buildFiltersFromParams()
+    // 简单比较，如果参数有变化则更新
+    const currentParams = JSON.stringify(filters)
+    const newParams = JSON.stringify(newFilters)
+    if (currentParams !== newParams) {
+      setFilters(newFilters)
     }
-  }, [searchParams, filters.keyword])
+    const keyword = searchParams.get('q') || ''
+    if (keyword !== searchValue) {
+      setSearchValue(keyword)
+    }
+  }, [searchParams])
 
   const handleBack = () => {
     router.push(previousRoute)
@@ -78,6 +112,10 @@ export default function SearchPage() {
             grayTheme={false} 
             value={searchValue}
             onChange={setSearchValue}
+            onFiltersChange={(newFilters) => {
+              setFilters(newFilters)
+            }}
+            initialFilters={filters}
           />
         </div>
       </ControlAppBar>
