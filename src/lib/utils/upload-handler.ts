@@ -59,10 +59,12 @@ export const handleFileUpload = async (files: File[]): Promise<string[]> => {
         uploadStore.track('success')
         results.push(result.data.public_id)
 
-        // 刷新页面数据
+        // 刷新页面数据（使用桥接层）
         if (typeof window !== 'undefined') {
-          // 触发路由刷新
-          window.dispatchEvent(new Event('upload-complete'))
+          // 触发数据刷新事件
+          window.dispatchEvent(new CustomEvent('data-refresh', { 
+            detail: { paths: ['/dashboard'] } 
+          }))
         }
 
         // 1秒后移除已完成的上传项

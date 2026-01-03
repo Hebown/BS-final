@@ -1,5 +1,6 @@
 /**
  * 布局工具函数
+ * 参考 immich 的实现，使用 justified-layout 进行图片网格布局
  */
 
 import createJustifiedLayout from 'justified-layout'
