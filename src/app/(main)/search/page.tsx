@@ -8,7 +8,8 @@ import ControlAppBar from '@/components/shared/ControlAppBar'
 import SearchBar from '@/components/search/SearchBar'
 import SearchResultsGrid from '@/components/search/SearchResultsGrid'
 import ImageModal from '@/components/ImageModal'
-import { mdiArrowLeft } from '@mdi/js'
+import { mdiArrowLeft, mdiRobot } from '@mdi/js'
+import { Icon } from '@mdi/react'
 
 export default function SearchPage() {
   const router = useRouter()
@@ -67,13 +68,39 @@ export default function SearchPage() {
       setLoading(true)
       
       try {
-        const result = await searchImages(filters)
-        if (result.success && result.data) {
-          setImages(result.data || [])
+        // 检查是否是 MCP 搜索
+        const isMCPSearch = searchParams.get('mcp') === 'true'
+        const mcpResults = sessionStorage.getItem('mcpSearchResults')
+        
+        if (isMCPSearch && mcpResults) {
+          // 使用 MCP 搜索结果
+          try {
+            const results = JSON.parse(mcpResults)
+            setImages(results || [])
+            // 清除 sessionStorage，避免下次误用
+            sessionStorage.removeItem('mcpSearchResults')
+            sessionStorage.removeItem('mcpSearchParams')
+          } catch (parseError) {
+            console.error('解析 MCP 搜索结果失败:', parseError)
+            // 降级为普通搜索
+            const result = await searchImages(filters)
+            if (result.success && result.data) {
+              setImages(result.data || [])
+            } else {
+              setImages([])
+            }
+          }
         } else {
-          setImages([])
+          // 普通搜索
+          const result = await searchImages(filters)
+          if (result.success && result.data) {
+            setImages(result.data || [])
+          } else {
+            setImages([])
+          }
         }
       } catch (err) {
+        console.error('搜索失败:', err)
         setImages([])
       } finally {
         setLoading(false)
@@ -81,7 +108,7 @@ export default function SearchPage() {
     }
 
     performSearch()
-  }, [filters])
+  }, [filters, searchParams])
 
   // 监听 URL 参数变化
   useEffect(() => {
@@ -194,9 +221,21 @@ export default function SearchPage() {
 
       {/* 内容区域 - 添加顶部间距以避免被 AppBar 遮挡 */}
       <div className="mt-24 h-[calc(100vh-6rem)]">
+        {/* MCP 搜索提示 */}
+        {searchParams.get('mcp') === 'true' && !loading && (
+          <div className="mx-4 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+              <Icon path={mdiRobot} size={0.8} />
+              <span>AI 智能搜索：已使用自然语言理解您的查询</span>
+            </div>
+          </div>
+        )}
+        
         {loading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-immich-fg dark:text-immich-dark-fg">搜索中...</div>
+            <div className="text-immich-fg dark:text-immich-dark-fg">
+              {searchParams.get('mcp') === 'true' ? 'AI 正在理解您的查询...' : '搜索中...'}
+            </div>
           </div>
         ) : images.length > 0 ? (
           <SearchResultsGrid
