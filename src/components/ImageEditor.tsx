@@ -336,10 +336,10 @@ export default function ImageEditor({
   }
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-8rem)] overflow-hidden">
-      <div className="flex-1 flex gap-4 min-h-0">
-        {/* 左侧：图片预览区域 */}
-        <div className="flex-1 flex items-center justify-center bg-immich-dark-gray rounded-lg overflow-hidden p-4">
+    <div className="flex flex-col h-full max-h-[calc(100vh-8rem)] max-md:max-h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row gap-3 md:gap-4 min-h-0">
+        {/* 上方：图片预览区域（移动端）/ 左侧：图片预览区域（桌面端） */}
+        <div className="flex-1 flex items-center justify-center bg-immich-dark-gray rounded-lg overflow-hidden p-2 md:p-4 min-h-0">
           {imageLoaded ? (
             <div className="relative w-full h-full flex items-center justify-center">
               <canvas
@@ -356,9 +356,9 @@ export default function ImageEditor({
           )}
         </div>
 
-        {/* 右侧：编辑控制面板 */}
-        <div className="w-80 bg-immich-dark-bg border-l border-immich-dark-gray overflow-y-auto immich-scrollbar flex flex-col">
-          <div className="p-4 space-y-6 flex-1">
+        {/* 下方：编辑控制面板（移动端）/ 右侧：编辑控制面板（桌面端） */}
+        <div className="w-full md:w-80 bg-immich-dark-bg border-t md:border-t-0 md:border-l border-immich-dark-gray overflow-y-auto immich-scrollbar flex flex-col shrink-0 max-h-[50%] md:max-h-none">
+          <div className="p-3 md:p-4 space-y-4 md:space-y-6 flex-1">
             {/* 旋转控制 */}
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -486,7 +486,7 @@ export default function ImageEditor({
           </div>
 
           {/* 操作按钮 - 固定在底部 */}
-          <div className="p-4 border-t border-gray-700 bg-immich-dark-bg">
+          <div className="p-3 md:p-4 border-t border-gray-700 bg-immich-dark-bg shrink-0">
             <div className="flex gap-2">
               <Button
                 variant="outline"

@@ -242,10 +242,14 @@ export default function ImageModal({
         onClick={onClose}
       >
       {/* 关闭按钮 - 调整位置避免与信息栏关闭按钮重合 */}
-      <div className={cn(
-        "absolute top-4 z-10 transition-all",
-        showDetails || isEditing ? "right-84" : "right-4"
-      )}>
+        <div className={cn(
+          "absolute z-10 transition-all",
+          // 移动端：考虑导航栏高度；桌面端：从顶部开始
+          "top-4 md:top-4",
+          "max-md:top-14", // 移动端：导航栏高度是 h-14 (3.5rem)
+          // 位置调整
+          showDetails || isEditing ? "right-4 md:right-84" : "right-4"
+        )}>
         <IconButton
           variant="ghost"
           shape="round"
@@ -261,12 +265,15 @@ export default function ImageModal({
       {/* 导航按钮 - 调整位置避免覆盖信息栏 */}
       {images.length > 1 && (
         <>
-          {currentIndex > 0 && onPrevious && (
-            <div className={cn(
-              "absolute z-10 transition-all",
-              showDetails || isEditing ? "left-4" : "left-4",
-              showDetails || isEditing ? "bottom-1/2 translate-y-1/2" : "top-1/2 -translate-y-1/2"
-            )}>
+            {currentIndex > 0 && onPrevious && (
+              <div className={cn(
+                "absolute z-10 transition-all",
+                "left-4",
+                // 移动端：始终居中；桌面端：根据详情面板位置调整
+                showDetails || isEditing 
+                  ? "bottom-1/2 translate-y-1/2 max-md:bottom-1/2" 
+                  : "top-1/2 -translate-y-1/2"
+              )}>
               <IconButton
                 variant="ghost"
                 shape="round"
@@ -282,12 +289,16 @@ export default function ImageModal({
               />
             </div>
           )}
-          {currentIndex < images.length - 1 && onNext && (
-            <div className={cn(
-              "absolute z-10 transition-all",
-              showDetails || isEditing ? "right-84" : "right-4",
-              showDetails || isEditing ? "bottom-1/2 translate-y-1/2" : "top-1/2 -translate-y-1/2"
-            )}>
+            {currentIndex < images.length - 1 && onNext && (
+              <div className={cn(
+                "absolute z-10 transition-all",
+                // 移动端：始终在右侧；桌面端：根据详情面板位置调整
+                showDetails || isEditing ? "right-4 md:right-84" : "right-4",
+                // 移动端：始终居中；桌面端：根据详情面板位置调整
+                showDetails || isEditing 
+                  ? "bottom-1/2 translate-y-1/2 max-md:bottom-1/2" 
+                  : "top-1/2 -translate-y-1/2"
+              )}>
               <IconButton
                 variant="ghost"
                 shape="round"
@@ -307,7 +318,12 @@ export default function ImageModal({
       )}
 
       {/* 工具栏 */}
-      <div className="absolute top-4 left-4 z-10 flex gap-2">
+      <div className={cn(
+        "absolute left-4 z-10 flex gap-2",
+        // 移动端：考虑导航栏高度；桌面端：从顶部开始
+        "top-4 md:top-4",
+        "max-md:top-14" // 移动端：导航栏高度是 h-14 (3.5rem)
+      )}>
         <IconButton
           variant="ghost"
           shape="round"
@@ -441,13 +457,19 @@ export default function ImageModal({
 
       {/* 图片显示区域 */}
       <div 
-        className="relative w-full h-full flex items-center justify-center p-4"
+        className={cn(
+          "relative w-full h-full flex items-center justify-center",
+          // 移动端：详情面板全屏时隐藏图片区域，桌面端：调整 padding
+          (showDetails || isEditing) && !isImageEditing ? "p-2 md:p-4" : "p-4",
+          // 移动端：详情面板打开时，图片区域隐藏
+          (showDetails || isEditing) && !isImageEditing ? "max-md:hidden" : ""
+        )}
         onClick={(e) => e.stopPropagation()}
       >
         {image.secureUrl ? (
           isImageEditing ? (
             // 编辑模式：显示编辑器
-            <div className="w-full h-full max-w-7xl max-h-[calc(100vh-8rem)]">
+            <div className="w-full h-full max-w-7xl max-h-[calc(100vh-8rem)] max-md:max-h-[calc(100vh-4rem)]">
               <ImageEditor
                 publicId={image.publicId}
                 secureUrl={image.secureUrl}
@@ -493,14 +515,21 @@ export default function ImageModal({
       {(showDetails || isEditing) && !isImageEditing && (
         <div 
           className={cn(
-            "absolute right-0 top-0 h-full w-80 bg-white dark:bg-immich-dark-bg",
+            "absolute right-0 top-0 bg-white dark:bg-immich-dark-bg",
+            // 移动端：全屏宽度，从底部滑入；桌面端：固定宽度，从右侧滑入
+            "w-full md:w-80",
+            // 移动端：全屏高度，留出顶部导航栏空间；桌面端：全高
+            "h-full md:h-full",
+            "max-md:top-14 max-md:h-[calc(100vh-3.5rem)]",
             "border-l border-gray-200 dark:border-immich-dark-gray shadow-2xl",
             "overflow-y-auto immich-scrollbar",
-            "animate-in slide-in-from-right duration-300"
+            "animate-in slide-in-from-right duration-300",
+            // 移动端：从底部滑入
+            "max-md:animate-in max-md:slide-in-from-bottom"
           )}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="p-6 space-y-6">
+          <div className="p-4 md:p-6 space-y-4 md:space-y-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-immich-fg dark:text-immich-dark-fg">
                 {isEditing ? '编辑信息' : '详细信息'}
