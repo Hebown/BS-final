@@ -5,6 +5,14 @@ import { prisma } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import {z} from 'zod'
 import bcrypt from 'bcryptjs'
+import { v2 as cloudinary } from 'cloudinary'
+
+// 配置 Cloudinary
+cloudinary.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
 
 const createUserSchema= z.object({
     username:z.string()
@@ -102,6 +110,37 @@ export async function createUser(
                 createdAt: new Date()
             }
         })
+
+        // 在 Cloudinary 中创建用户文件夹
+        // Cloudinary 的文件夹是在上传时自动创建的，所以我们上传一个占位符文件来创建文件夹
+        try {
+            const folderPath = `image-gallery/${user.id}`
+            
+            // 创建一个 1x1 像素的透明 PNG 作为占位符
+            const placeholderImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            
+            // 上传占位符文件以创建文件夹
+            const uploadResult = await cloudinary.uploader.upload(placeholderImage, {
+                folder: folderPath,
+                public_id: '.folder_placeholder',
+                resource_type: 'image',
+                overwrite: false, // 如果已存在则不覆盖
+            })
+            
+            // 立即删除占位符文件（文件夹会保留）
+            try {
+                await cloudinary.uploader.destroy(uploadResult.public_id)
+            } catch (deleteError) {
+                // 如果删除失败，不影响用户创建，只是会留下一个占位符文件
+                console.log('删除占位符文件失败（不影响用户创建）:', deleteError)
+            }
+            
+            console.log(`✓ 已在 Cloudinary 中创建用户文件夹: ${folderPath}`)
+        } catch (cloudinaryError) {
+            // Cloudinary 文件夹创建失败不应该阻止用户注册
+            // 文件夹会在用户第一次上传图片时自动创建
+            console.error('创建 Cloudinary 文件夹失败（不影响用户创建）:', cloudinaryError)
+        }
 
         revalidatePath('/')
 

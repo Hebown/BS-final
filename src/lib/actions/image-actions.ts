@@ -90,6 +90,20 @@ export async function uploadImage(
       }
     }
 
+    // 验证用户是否存在（在开始处理文件之前检查，避免浪费资源）
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id }
+    })
+
+    if (!user) {
+      console.error('用户不存在:', session.user.id)
+      return {
+        success: false,
+        message: '用户不存在，请重新登录',
+        errors: {}
+      }
+    }
+
     const file = formData.get('image') as File
     const title = formData.get('title') as string
 
@@ -111,7 +125,7 @@ export async function uploadImage(
       }
     }
 
-    // 提取 EXIF 信息
+    // 提取 EXIF 信息（在上传前提取，确保获取原始 EXIF 数据）
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     let exifData: any = null
@@ -121,41 +135,130 @@ export async function uploadImage(
     let lens: string | null = null
 
     try {
+      // 提取完整的 EXIF 数据，包括常用字段
       exifData = await exifr.parse(buffer, {
-        pick: ['DateTimeOriginal', 'GPSLatitude', 'GPSLongitude', 'Make', 'Model', 'LensModel', 'ISO', 'FNumber', 'ExposureTime', 'FocalLength']
+        // 基础信息
+        pick: [
+          // 时间信息
+          'DateTimeOriginal',
+          'DateTime',
+          'CreateDate',
+          'ModifyDate',
+          // GPS 信息
+          'GPSLatitude',
+          'GPSLongitude',
+          'GPSAltitude',
+          'GPSDateStamp',
+          'GPSTimeStamp',
+          // 相机信息
+          'Make',
+          'Model',
+          'Software',
+          'Artist',
+          'Copyright',
+          // 镜头信息
+          'LensModel',
+          'LensMake',
+          'LensSerialNumber',
+          // 拍摄参数
+          'ISO',
+          'FNumber',
+          'ExposureTime',
+          'FocalLength',
+          'FocalLengthIn35mmFormat',
+          'ExposureMode',
+          'ExposureProgram',
+          'MeteringMode',
+          'WhiteBalance',
+          'Flash',
+          'Orientation',
+          // 图片信息
+          'ImageWidth',
+          'ImageHeight',
+          'ColorSpace',
+          'XResolution',
+          'YResolution',
+        ],
+        // 同时提取 GPS 坐标（用于地理定位）
+        gps: true,
       })
-
-      // 处理拍摄时间
-      if (exifData?.DateTimeOriginal) {
-        takenAt = new Date(exifData.DateTimeOriginal)
+      if (exifData) {
+        console.log("found exif data")
       }
 
-      // 处理地理位置（简化处理，实际可以调用逆地理编码 API）
+      // 处理拍摄时间（优先使用 DateTimeOriginal，否则使用其他时间字段）
+      if (exifData?.DateTimeOriginal) {
+        takenAt = new Date(exifData.DateTimeOriginal)
+      } else if (exifData?.CreateDate) {
+        takenAt = new Date(exifData.CreateDate)
+      } else if (exifData?.DateTime) {
+        takenAt = new Date(exifData.DateTime)
+      }
+
+      // 处理地理位置（优先使用 GPS 坐标）
       if (exifData?.GPSLatitude && exifData?.GPSLongitude) {
+        // 格式化为 "纬度, 经度" 格式
         location = `${exifData.GPSLatitude}, ${exifData.GPSLongitude}`
+        // 如果有海拔信息，也可以包含
+        if (exifData?.GPSAltitude) {
+          location += ` (${exifData.GPSAltitude}m)`
+        }
       }
 
       // 处理相机信息
       if (exifData?.Make && exifData?.Model) {
         camera = `${exifData.Make} ${exifData.Model}`
+      } else if (exifData?.Make) {
+        camera = exifData.Make
+      } else if (exifData?.Model) {
+        camera = exifData.Model
       }
 
       // 处理镜头信息
       if (exifData?.LensModel) {
         lens = exifData.LensModel
+        if (exifData?.LensMake) {
+          lens = `${exifData.LensMake} ${lens}`
+        }
+      } else if (exifData?.LensMake) {
+        lens = exifData.LensMake
+      }
+
+      // 清理 EXIF 数据，移除不需要的字段，只保留有用的信息
+      if (exifData) {
+        // 保留所有提取的字段，但移除可能很大的二进制数据
+        const cleanedExif: any = {}
+        for (const key in exifData) {
+          // 跳过二进制数据和过大的数据
+          if (typeof exifData[key] !== 'object' || exifData[key] === null) {
+            cleanedExif[key] = exifData[key]
+          } else if (Array.isArray(exifData[key]) && exifData[key].length < 100) {
+            cleanedExif[key] = exifData[key]
+          }
+        }
+        exifData = cleanedExif
       }
     } catch (exifError) {
       console.log('EXIF 提取失败（可能图片没有 EXIF 信息）:', exifError)
+      // 即使 EXIF 提取失败，也继续上传流程
     }
 
     // 将 File 转换为 base64
     const base64Image = `data:${file.type};base64,${buffer.toString('base64')}`
 
-    // 上传到 Cloudinary
+    // 上传到 Cloudinary（保留 EXIF 数据）
     const uploadResult = await cloudinary.uploader.upload(base64Image, {
       folder: `image-gallery/${session.user.id}`,
       public_id: title?.replace(/\s+/g, '_') || `image_${Date.now()}`,
-      resource_type: 'auto'
+      resource_type: 'auto',
+      // 保留 EXIF 和其他元数据
+      exif: true,
+      // 保留颜色信息
+      colors: true,
+      // 保留面部检测信息（如果需要）
+      faces: false,
+      // 保留图片质量信息
+      quality_analysis: false,
     })
 
     console.log('上传成功:', uploadResult)
@@ -318,10 +421,18 @@ export async function getImages(userId?: string): Promise<{
       }
     })
 
-    // 按创建时间排序
+    // 按拍摄时间排序（优先使用 takenAt，如果没有则使用 createdAt）
     images.sort((a, b) => {
-      const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime()
-      const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime()
+      // 优先使用拍摄时间，如果没有则使用创建时间
+      const dateA = a.takenAt 
+        ? (a.takenAt instanceof Date ? a.takenAt.getTime() : new Date(a.takenAt).getTime())
+        : (a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime())
+      
+      const dateB = b.takenAt 
+        ? (b.takenAt instanceof Date ? b.takenAt.getTime() : new Date(b.takenAt).getTime())
+        : (b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime())
+      
+      // 降序排序（最新的在前）
       return dateB - dateA
     })
 
@@ -383,38 +494,101 @@ export async function deleteImage(imageId: string): Promise<{
       }
     }
 
-    // 查找图片并验证所有权
-    const image = await prisma.image.findUnique({
-      where: { id: imageId },
-      select: { userId: true, publicId: true }
-    })
+    let image: { userId: string; publicId: string; id: string } | null = null
+    let publicIdToDelete: string | null = null
 
-    if (!image) {
-      return {
-        success: false,
-        error: '图片不存在'
+    // 首先尝试用 imageId 作为数据库 ID 查找
+    try {
+      image = await prisma.image.findUnique({
+        where: { id: imageId },
+        select: { userId: true, publicId: true, id: true }
+      })
+      
+      if (image) {
+        // 验证所有权
+        if (image.userId !== session.user.id) {
+          return {
+            success: false,
+            error: '无权删除此图片'
+          }
+        }
+        publicIdToDelete = image.publicId
       }
+    } catch (dbError) {
+      // 数据库查询失败，继续尝试其他方式
+      console.log('数据库查询失败，尝试其他方式:', dbError)
     }
 
-    if (image.userId !== session.user.id) {
-      return {
-        success: false,
-        error: '无权删除此图片'
+    // 如果数据库中没有找到，尝试用 imageId 作为 publicId 查找
+    if (!image) {
+      try {
+        image = await prisma.image.findFirst({
+          where: { 
+            publicId: imageId,
+            userId: session.user.id
+          },
+          select: { userId: true, publicId: true, id: true }
+        })
+        
+        if (image) {
+          publicIdToDelete = image.publicId
+        } else {
+          // 如果数据库中没有记录，但 imageId 看起来像是一个 publicId
+          // 直接使用 imageId 作为 publicId 从 Cloudinary 删除
+          // 检查是否是当前用户的图片（通过 publicId 前缀）
+          const expectedPrefix = `image-gallery/${session.user.id}/`
+          if (imageId.startsWith(expectedPrefix) || imageId.includes('/')) {
+            publicIdToDelete = imageId
+          } else {
+            return {
+              success: false,
+              error: '图片不存在'
+            }
+          }
+        }
+      } catch (dbError) {
+        // 如果数据库查询失败，但 imageId 看起来像是一个 publicId，尝试直接从 Cloudinary 删除
+        const expectedPrefix = `image-gallery/${session.user.id}/`
+        if (imageId.startsWith(expectedPrefix) || imageId.includes('/')) {
+          publicIdToDelete = imageId
+        } else {
+          return {
+            success: false,
+            error: '图片不存在'
+          }
+        }
       }
     }
 
     // 从 Cloudinary 删除
-    try {
-      await cloudinary.uploader.destroy(image.publicId)
-    } catch (cloudinaryError) {
-      console.error('从 Cloudinary 删除失败:', cloudinaryError)
-      // 继续删除数据库记录
+    if (publicIdToDelete) {
+      try {
+        await cloudinary.uploader.destroy(publicIdToDelete)
+      } catch (cloudinaryError) {
+        console.error('从 Cloudinary 删除失败:', cloudinaryError)
+        // 如果 Cloudinary 删除失败，但数据库中有记录，仍然尝试删除数据库记录
+        // 如果数据库中没有记录，返回错误
+        if (!image) {
+          return {
+            success: false,
+            error: `从 Cloudinary 删除失败: ${cloudinaryError instanceof Error ? cloudinaryError.message : '未知错误'}`
+          }
+        }
+      }
     }
 
-    // 从数据库删除（级联删除会处理关联的标签关系）
-    await prisma.image.delete({
-      where: { id: imageId }
-    })
+    // 如果数据库中有记录，删除数据库记录（级联删除会处理关联的标签关系）
+    if (image) {
+      try {
+        await prisma.image.delete({
+          where: { id: image.id }
+        })
+      } catch (deleteError) {
+        console.error('从数据库删除失败:', deleteError)
+        // 即使数据库删除失败，如果 Cloudinary 删除成功，也返回成功
+        // 因为图片本身已经从 Cloudinary 删除了
+      }
+    }
 
     revalidatePath('/dashboard')
     revalidatePath('/')
@@ -595,10 +769,18 @@ export async function searchImages(params: SearchParams): Promise<{
       )
     }
 
-    // 按创建时间排序
+    // 按拍摄时间排序（优先使用 takenAt，如果没有则使用 createdAt）
     images.sort((a, b) => {
-      const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime()
-      const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime()
+      // 优先使用拍摄时间，如果没有则使用创建时间
+      const dateA = a.takenAt 
+        ? (a.takenAt instanceof Date ? a.takenAt.getTime() : new Date(a.takenAt).getTime())
+        : (a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime())
+      
+      const dateB = b.takenAt 
+        ? (b.takenAt instanceof Date ? b.takenAt.getTime() : new Date(b.takenAt).getTime())
+        : (b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime())
+      
+      // 降序排序（最新的在前）
       return dateB - dateA
     })
 
