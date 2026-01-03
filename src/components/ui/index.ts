@@ -1,4 +1,11 @@
 export * from "./button"
 export * from "./input"
 export * from "./card"
+export * from "./alert"
+export * from "./field"
+export * from "./stack"
+export * from "./password-input"
+export * from "./icon-button"
+export * from "./modal"
+export { HStack } from "./stack"
 
