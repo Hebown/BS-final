@@ -68,28 +68,27 @@ export default function SearchFilterSections({
       {/* 标签选择 */}
       {tags.length > 0 && (
         <div>
-          <label className="uppercase text-sm font-medium text-immich-fg dark:text-immich-dark-fg mb-2 block">
+          <label className="uppercase text-sm immich-form-label text-immich-fg dark:text-immich-dark-fg mb-2 block">
             <Icon path={mdiTag} size={0.8} className="inline mr-1" />
             标签
           </label>
-          <div className="flex flex-wrap gap-2 mt-2">
+          <div className="flex flex-wrap gap-1 mt-2">
             {tags.map((tag) => {
               const isSelected = filters.tags?.includes(tag.id)
               return (
-                <button
+                <span
                   key={tag.id}
-                  type="button"
-                  onClick={() => handleTagToggle(tag.id)}
                   className={cn(
-                    "px-3 py-1 rounded-full text-sm transition-colors",
+                    "inline-block h-min whitespace-nowrap ps-3 pe-3 py-1 text-center align-baseline leading-none rounded-full transition-all cursor-pointer",
                     isSelected
-                      ? "bg-immich-primary text-white"
-                      : "bg-gray-200 dark:bg-gray-700 text-immich-fg dark:text-immich-dark-fg hover:bg-gray-300 dark:hover:bg-gray-600"
+                      ? "text-gray-100 dark:text-immich-dark-gray bg-primary hover:bg-immich-primary/80 dark:hover:bg-immich-dark-primary/80"
+                      : "text-immich-fg dark:text-immich-dark-fg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
                   )}
                   style={isSelected && tag.color ? { backgroundColor: tag.color } : undefined}
+                  onClick={() => handleTagToggle(tag.id)}
                 >
-                  {tag.name}
-                </button>
+                  <p className="text-sm">{tag.name}</p>
+                </span>
               )
             })}
           </div>
@@ -98,7 +97,7 @@ export default function SearchFilterSections({
 
       {/* 日期范围 */}
       <div>
-        <label className="uppercase text-sm font-medium text-immich-fg dark:text-immich-dark-fg mb-2 block">
+        <label className="uppercase text-sm immich-form-label text-immich-fg dark:text-immich-dark-fg mb-2 block">
           <Icon path={mdiCalendar} size={0.8} className="inline mr-1" />
           日期范围
         </label>
@@ -127,7 +126,7 @@ export default function SearchFilterSections({
 
       {/* 相机型号 */}
       <div>
-        <label className="uppercase text-sm font-medium text-immich-fg dark:text-immich-dark-fg mb-2 block">
+        <label className="uppercase text-sm immich-form-label text-immich-fg dark:text-immich-dark-fg mb-2 block">
           <Icon path={mdiCamera} size={0.8} className="inline mr-1" />
           相机
         </label>
@@ -144,7 +143,7 @@ export default function SearchFilterSections({
 
       {/* 地点 */}
       <div>
-        <label className="uppercase text-sm font-medium text-immich-fg dark:text-immich-dark-fg mb-2 block">
+        <label className="uppercase text-sm immich-form-label text-immich-fg dark:text-immich-dark-fg mb-2 block">
           <Icon path={mdiMapMarker} size={0.8} className="inline mr-1" />
           地点
         </label>
